@@ -1,0 +1,28 @@
+# Python cache/bytecode
+__pycache__/
+*.pyc
+
+# Python tooling caches
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+
+# Local ML outputs
+mlruns/
+artifacts/*
+!artifacts/.gitkeep
+
+# Environment files
+.env
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.jupyter_config/migrated
+.jupyter_runtime/jupyter_cookie_secret
+Data/dummy_data.csv
+.ipynb_checkpoints/01_notebook_local-checkpoint.md
+logs/*
