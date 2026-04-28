@@ -1,3 +1,4 @@
+# NOTE: Consider creating a separate requirements.txt for training and inference
 flask==3.1.3
 numpy==2.4.4
 pandas==2.3.3
