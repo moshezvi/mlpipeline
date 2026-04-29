@@ -11,10 +11,7 @@ __pycache__/
 venv/
 
 # Local ML outputs
-mlruns/
-artifacts/*
-!artifacts/.gitkeep
-
+runs
 # Environment files
 .env
 
@@ -25,4 +22,3 @@ Thumbs.db
 .jupyter_runtime/jupyter_cookie_secret
 Data/dummy_data.csv
 .ipynb_checkpoints/01_notebook_local-checkpoint.md
-logs/*

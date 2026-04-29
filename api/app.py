@@ -12,7 +12,7 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = app.logger
 
-MODEL_DIR = Path(os.environ.get("MODEL_DIR", "artifacts/latest"))
+MODEL_DIR = Path(os.environ.get("MODEL_DIR", "runs/artifacts/latest"))
 MODEL_PATH = MODEL_DIR / "regression_model.joblib"
 VERSION_PATH = MODEL_DIR / "model_version.txt"
 

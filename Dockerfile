@@ -6,9 +6,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY api ./api
-COPY artifacts ./artifacts
+COPY runs/artifacts ./runs/artifacts
 
-ENV MODEL_DIR=/app/artifacts/latest
+ENV MODEL_DIR=/app/runs/artifacts/latest
 EXPOSE 8080
 
 CMD ["python", "api/app.py"]
