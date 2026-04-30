@@ -59,7 +59,8 @@ Source: `docs/architecture.mmd`
 mlpipeline/
 ├── api/
 │   ├── app.py
-│   └── model_loader.py
+│   ├── model_loader.py
+│   └── structured_logging.py
 ├── training/
 │   ├── __init__.py
 │   ├── train.py
@@ -183,6 +184,8 @@ curl -X POST http://127.0.0.1:8080/predict \
   -H "Content-Type: application/json" \
   -d '{"age": 42, "income_k": 88.0, "tenure_years": 6}'
 ```
+
+Structured logs are JSON lines on stdout (`latency_ms`, `request_id`, etc.; see `api/structured_logging.py`). In AWS, a log driver or agent (for example ECS **awslogs** or **Fluent Bit** on EKS) forwards those lines to **CloudWatch Logs** — details in `docs/plans/monitoring.md` and `docs/03_inference.md`.
 
 ### 4) Run with Docker
 
