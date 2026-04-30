@@ -1,0 +1,119 @@
+# Inference pipeline: API tests + inference image build, or manual release build + metadata.
+name: inference
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_repository:
+        description: "Target container repository (ECR or equivalent), without tag"
+        required: true
+      image_tag:
+        description: "Optional image tag (default: inference-<short-sha>)"
+        required: false
+      aws_region:
+        description: "AWS region for ECR operations"
+        required: false
+        default: "us-east-1"
+  pull_request:
+    paths:
+      - "api/**"
+      - "tests/test_api.py"
+      - "tests/conftest.py"
+      - "inference.Dockerfile"
+      - "requirements.txt"
+      - ".github/workflows/inference.yml"
+  push:
+    branches: [main]
+    paths:
+      - "api/**"
+      - "tests/test_api.py"
+      - "tests/conftest.py"
+      - "inference.Dockerfile"
+      - "requirements.txt"
+      - ".github/workflows/inference.yml"
+
+jobs:
+  inference-ci:
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Inference unit tests
+        run: pytest -q tests/test_api.py
+
+      - name: API import smoke check
+        run: python -c "from api.app import app; print(app.url_map)"
+
+      - name: Build inference Docker image
+        run: |
+          docker build -f inference.Dockerfile -t mlpipeline-inference:ci .
+
+  build-inference-image:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Inference unit tests
+        run: pytest -q tests/test_api.py
+
+      - name: Resolve image metadata
+        run: |
+          TAG="${{ github.event.inputs.image_tag }}"
+          if [ -z "$TAG" ]; then
+            SHORT_SHA=$(git rev-parse --short HEAD)
+            TAG="inference-${SHORT_SHA}"
+          fi
+          IMAGE_URI="${{ github.event.inputs.image_repository }}:${TAG}"
+          echo "IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
+          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
+
+      - name: Build model-agnostic inference image
+        run: |
+          docker build \
+            -f inference.Dockerfile \
+            -t "${IMAGE_URI}" .
+
+      - name: Emit build metadata artifact
+        run: |
+          cat > inference_build_metadata.json <<EOF
+          {
+            "image_uri": "${IMAGE_URI}",
+            "image_tag": "${IMAGE_TAG}",
+            "git_sha": "$(git rev-parse HEAD)",
+            "aws_region": "${{ github.event.inputs.aws_region }}",
+            "note": "Pass MODEL_ARTIFACT_URI (and optional MODEL_VERSION) at deploy/runtime; not used to build this image."
+          }
+          EOF
+          cat inference_build_metadata.json
+
+      - name: Upload build metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: inference-build-metadata
+          path: inference_build_metadata.json
+
+      - name: Push image (placeholder)
+        run: |
+          echo "TODO: Configure AWS credentials and ECR login."
+          echo "TODO: docker push ${IMAGE_URI}"
+          echo "At deploy time set e.g. MODEL_ARTIFACT_URI=s3://bucket/path/model.tar.gz"

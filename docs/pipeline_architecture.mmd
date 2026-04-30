@@ -1,0 +1,28 @@
+flowchart TD
+    %% Code-driven CI workflow
+    A[Developer pushes code] --> B[GitHub Actions CI]
+    B --> C[Run tests and linting]
+
+    C --> D[Build training image]
+    D --> E[Push training image to ECR]
+    E --> F[Create or update SageMaker training pipeline]
+
+    C --> G[Build Flask inference image]
+    G --> H[Push Flask inference image to ECR]
+    H --> I[Deploy Flask service]
+
+    %% Data-driven training workflow
+    J[New training data lands in S3] --> K[EventBridge trigger]
+    K --> L[Start SageMaker training pipeline]
+    F --> L
+    L --> M[Run training job using training image from ECR]
+    M --> N[Write model.tar.gz to S3 versioned runs path]
+    N --> O[Update latest model artifact or metadata]
+
+    %% Inference/runtime workflow
+    O --> P[Trigger Flask restart/reload]
+    I --> Q[Flask service starts]
+    P --> Q
+    Q --> R[Download latest model artifact from S3]
+    R --> S[Load model into memory]
+    S --> T[Serve prediction endpoint]

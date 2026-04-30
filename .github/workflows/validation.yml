@@ -1,3 +1,4 @@
+# PR / main: fast repo-wide quality gate only (no training or inference product smokes).
 name: validation
 
 on:
@@ -6,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test-and-build:
+  lint-and-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -23,14 +24,5 @@ jobs:
       - name: Run lint checks
         run: ruff check .
 
-      - name: Run training smoke check
-        run: python training/train.py --samples 50 --output-dir runs/artifacts
-
       - name: Run unit tests
         run: pytest -q
-
-      - name: API import smoke check
-        run: python -c "from api.app import app; print(app.url_map)"
-
-      - name: Build Docker image
-        run: docker build -t mlpipeline-takehome:ci .

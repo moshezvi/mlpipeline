@@ -1,10 +1,9 @@
 import logging
-import os
-from pathlib import Path
 
-import joblib
 import pandas as pd
 from flask import Flask, jsonify, request
+
+from api.model_loader import load_model_bundle
 
 FEATURES = ["age", "income_k", "tenure_years"]
 
@@ -12,12 +11,7 @@ app = Flask(__name__)
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = app.logger
 
-MODEL_DIR = Path(os.environ.get("MODEL_DIR", "runs/artifacts/latest"))
-MODEL_PATH = MODEL_DIR / "regression_model.joblib"
-VERSION_PATH = MODEL_DIR / "model_version.txt"
-
-MODEL = joblib.load(MODEL_PATH)
-MODEL_VERSION = VERSION_PATH.read_text(encoding="utf-8").strip()
+MODEL, MODEL_VERSION = load_model_bundle()
 
 
 @app.before_request

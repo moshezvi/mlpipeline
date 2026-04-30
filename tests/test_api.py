@@ -1,5 +1,6 @@
 import importlib
 import sys
+import tarfile
 from pathlib import Path
 
 import joblib
@@ -34,6 +35,55 @@ def test_health_endpoint_returns_status_and_model_version(tmp_path, monkeypatch)
     payload = response.get_json()
     assert payload["status"] == "ok"
     assert payload["model_version"] == "vtest"
+
+
+def test_load_via_model_artifact_uri_local_dir_and_version_override(tmp_path, monkeypatch):
+    """MODEL_ARTIFACT_URI + MODEL_VERSION when model_version.txt is absent."""
+    model_dir = tmp_path / "from_uri"
+    model_dir.mkdir()
+    x = np.array([[20, 50.0, 1], [40, 80.0, 5]])
+    y = np.array([30000.0, 60000.0])
+    model = LinearRegression().fit(x, y)
+    joblib.dump(model, model_dir / "regression_model.joblib")
+    # No model_version.txt — version comes from env
+    monkeypatch.setenv("MODEL_ARTIFACT_URI", str(model_dir))
+    monkeypatch.setenv("MODEL_VERSION", "v-from-env")
+    monkeypatch.setenv("MODEL_DIR", str(tmp_path / "unused_default"))
+
+    sys.modules.pop("api.app", None)
+    app_module = importlib.import_module("api.app")
+    client = app_module.app.test_client()
+
+    health = client.get("/health")
+    assert health.get_json()["model_version"] == "v-from-env"
+
+
+def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
+    """Local tarball path containing regression_model.joblib + model_version.txt."""
+    inner = tmp_path / "bundle"
+    inner.mkdir()
+    x = np.array([[20, 50.0, 1], [40, 80.0, 5]])
+    y = np.array([30000.0, 60000.0])
+    model = LinearRegression().fit(x, y)
+    joblib.dump(model, inner / "regression_model.joblib")
+    (inner / "model_version.txt").write_text("v-tar", encoding="utf-8")
+
+    tar_path = tmp_path / "model.tar.gz"
+    with tarfile.open(tar_path, "w:gz") as tf:
+        for p in inner.iterdir():
+            tf.add(p, arcname=p.name)
+
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    monkeypatch.setenv("MODEL_ARTIFACT_URI", str(tar_path))
+    monkeypatch.setenv("MODEL_DIR", str(staging))
+    monkeypatch.delenv("MODEL_VERSION", raising=False)
+
+    sys.modules.pop("api.app", None)
+    app_module = importlib.import_module("api.app")
+    client = app_module.app.test_client()
+
+    assert client.get("/health").get_json()["model_version"] == "v-tar"
 
 
 def test_predict_valid_and_invalid_payloads(tmp_path, monkeypatch):
