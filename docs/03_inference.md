@@ -11,10 +11,10 @@ The inference API is implemented with Flask and exposes two endpoints:
 - `GET /health`
 - `POST /predict`
 
-The app loads model artifacts at startup from:
+The app loads model artifacts at startup (see `MODEL_DIR` / `MODEL_ARTIFACT_URI` in `api/model_loader.py`); by default that is under `runs/artifacts/latest/`:
 
-- `artifacts/latest/regression_model.joblib`
-- `artifacts/latest/model_version.txt`
+- `regression_model.joblib`
+- `model_version.txt` (unless `MODEL_VERSION` is set when using URI-based bundles)
 
 The model version is returned in both health and prediction responses.
 
@@ -64,23 +64,23 @@ Successful response:
 
 ## Logging Behavior
 
-Basic request/error logging is included:
+Logs are **structured JSON** (one object per line on **stdout**) with fields such as:
 
-- request method/path logging for each request
-- health check success logging
-- prediction validation errors
-- prediction inference exceptions (with stack trace)
-- prediction success logging
+- **`http_request`** — every response: `request_id`, `method`, `path`, `status_code`, **`latency_ms`** (end-to-end for that request), `model_version`
+- **`predict_success`** — successful inference: `request_id`, `predict_ms` (model forward pass only), `model_version`
+- **`predict_validation_error`** — bad JSON, missing fields, or non-numeric features: `request_id`, `reason`, `model_version`
+- **`predict_inference_error`** — model/runtime failure: `request_id`, `traceback`, `model_version`
+
+In production on AWS, an **agent or log driver** (for example ECS **`awslogs`**, or **Fluent Bit** on EKS) collects these stdout lines and forwards them to **CloudWatch Logs**; the app does not call the CloudWatch API directly. See `docs/plans/monitoring.md` for the short design note.
 
 ## Artifact Contract Used by API
 
-The API uses the active model alias under:
+The API loads from **`MODEL_DIR`** (default `runs/artifacts/latest`) or resolves **`MODEL_ARTIFACT_URI`** at startup (see `api/model_loader.py`). Files expected under the resolved directory:
 
-- `artifacts/latest/regression_model.joblib`
-- `artifacts/latest/model_version.txt`
-- `artifacts/latest/metrics.json` (available for inspection, not required for prediction)
+- `regression_model.joblib`
+- `model_version.txt` (unless `MODEL_VERSION` is supplied for URI-only bundles)
 
-This aligns with training output layout where each run is immutable under `artifacts/runs/vNNN/` and the currently served model is mirrored to `artifacts/latest/`.
+Training writes the same layout under `runs/artifacts/runs/vNNN/` with a `latest/` alias.
 
 ## Dockerization
 
@@ -90,7 +90,7 @@ Container behavior:
 
 - base image: `python:3.11-slim`
 - installs dependencies from `requirements.txt`
-- copies `api/` and `artifacts/` into image
+- copies `api/` and `runs/artifacts/` into the image (for local/smoke runs that bake artifacts)
 - exposes port `8080`
 - starts Flask app via:
   - `python api/app.py`
