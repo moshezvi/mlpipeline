@@ -13,7 +13,7 @@ The inference API is implemented with Flask and exposes two endpoints:
 
 The app loads model artifacts at startup (see `MODEL_DIR` / `MODEL_ARTIFACT_URI` in `api/model_loader.py`); by default that is under `runs/artifacts/latest/`:
 
-- `regression_model.joblib`
+- `sample_model.joblib`
 - `model_version.txt` (unless `MODEL_VERSION` is set when using URI-based bundles)
 
 The model version is returned in both health and prediction responses.
@@ -77,27 +77,27 @@ In production on AWS, an **agent or log driver** (for example ECS **`awslogs`**,
 
 The API loads from **`MODEL_DIR`** (default `runs/artifacts/latest`) or resolves **`MODEL_ARTIFACT_URI`** at startup (see `api/model_loader.py`). Files expected under the resolved directory:
 
-- `regression_model.joblib`
+- `sample_model.joblib`
 - `model_version.txt` (unless `MODEL_VERSION` is supplied for URI-only bundles)
 
 Training writes the same layout under `runs/artifacts/runs/vNNN/` with a `latest/` alias.
 
 ## Dockerization
 
-### Dockerfile
+### local.Dockerfile
 
-Container behavior:
+Container behavior (local verification path):
 
 - base image: `python:3.11-slim`
 - installs dependencies from `requirements.txt`
 - copies `api/` and `runs/artifacts/` into the image (for local/smoke runs that bake artifacts)
 - exposes port `8080`
 - starts Flask app via:
-  - `python api/app.py`
+  - `python -m api.app`
 
-Environment variable used by the app in Docker:
+Environment variable used by the app in this local image:
 
-- `MODEL_DIR=/app/artifacts/latest`
+- `MODEL_DIR=/app/runs/artifacts/latest`
 
 ### `.dockerignore`
 
@@ -106,7 +106,7 @@ A `.dockerignore` file was added to keep build context smaller and cleaner (excl
 ## Run Locally
 
 ```bash
-python api/app.py
+python -m api.app
 ```
 
 Health check:
@@ -126,8 +126,8 @@ curl -X POST http://127.0.0.1:8080/predict \
 ## Run with Docker
 
 ```bash
-docker build -t mlpipeline-api .
-docker run --rm -p 8080:8080 mlpipeline-api
+docker build -f local.Dockerfile -t mlpipeline-api:local .
+docker run --rm -p 8080:8080 mlpipeline-api:local
 ```
 
 Then call the same `/health` and `/predict` endpoints on `http://127.0.0.1:8080`.

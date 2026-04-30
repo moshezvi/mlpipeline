@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 import joblib
 
-MODEL_BASENAME = "regression_model.joblib"
+MODEL_BASENAME = "sample_model.joblib"
 VERSION_BASENAME = "model_version.txt"
 
 
@@ -107,7 +107,7 @@ def _materialize_uri_to_model_root(uri: str, model_dir: Path) -> Path:
 
 
 def resolve_model_directory() -> Path:
-    """Directory containing regression_model.joblib (after optional fetch/extract)."""
+    """Directory containing sample_model.joblib (after optional fetch/extract)."""
     uri = (os.environ.get("MODEL_ARTIFACT_URI") or "").strip()
     base = Path(os.environ.get("MODEL_DIR", "runs/artifacts/latest"))
 

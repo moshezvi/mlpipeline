@@ -107,7 +107,7 @@ jobs:
           PY
           )
           echo "TRAIN_EXECUTION_ARN=local-run-${MODEL_VERSION}" >> "$GITHUB_ENV"
-          echo "MODEL_ARTIFACT_URI=${{ github.event.inputs.output_dir }}/latest/regression_model.joblib" >> "$GITHUB_ENV"
+          echo "MODEL_ARTIFACT_URI=${{ github.event.inputs.output_dir }}/latest/sample_model.joblib" >> "$GITHUB_ENV"
           echo "TRAIN_STATUS=completed-local" >> "$GITHUB_ENV"
 
       - name: Submit training run (AWS placeholder)

@@ -32,7 +32,7 @@ Default CLI args:
 - `--samples 200`
 - `--random-seed 42`
 - `--output-dir runs/artifacts`
-- `--experiment-name mlpipeline-takehome`
+- `--experiment-name mlpipeline-sample`
 - `--data-uri` optional CSV path/URI (falls back to synthetic data when omitted)
 
 Example:
@@ -46,12 +46,12 @@ python training/train.py --samples 200 --random-seed 42 --output-dir runs/artifa
 In `runs/artifacts/`:
 
 - `runs/vNNN/` (immutable per run), containing:
-  - `regression_model.joblib`
+  - `sample_model.joblib`
   - `metrics.json`
   - `model_version.txt`
   - `manifest.json`
 - `latest/` (active model alias), containing:
-  - `regression_model.joblib`
+  - `sample_model.joblib`
   - `metrics.json`
   - `model_version.txt`
   - `manifest.json`

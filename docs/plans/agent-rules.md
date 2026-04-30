@@ -7,3 +7,4 @@ Rules:
 - Avoid overengineering
 - Prefer simple scripts over abstractions
 - Stop after each change and wait for confirmation
+- After code changes run tests to ensure working code

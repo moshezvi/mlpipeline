@@ -1,10 +1,15 @@
 import logging
+import sys
 import time
 import traceback
 import uuid
+from pathlib import Path
 
 import pandas as pd
 from flask import Flask, g, jsonify, request
+
+if __package__ is None or __package__ == "":
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from api.model_loader import load_model_bundle
 from api.structured_logging import log_event

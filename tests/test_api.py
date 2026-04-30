@@ -5,6 +5,7 @@ from pathlib import Path
 
 import joblib
 import numpy as np
+import pandas as pd
 from sklearn.linear_model import LinearRegression
 
 
@@ -12,11 +13,14 @@ def _prepare_model_artifacts(base_dir: Path):
     model_dir = base_dir / "runs" / "artifacts" / "latest"
     model_dir.mkdir(parents=True, exist_ok=True)
 
-    x = np.array([[20, 50.0, 1], [40, 80.0, 5], [60, 100.0, 8]])
+    x = pd.DataFrame(
+        [[20, 50.0, 1], [40, 80.0, 5], [60, 100.0, 8]],
+        columns=["age", "income_k", "tenure_years"],
+    )
     y = np.array([30000.0, 60000.0, 90000.0])
     model = LinearRegression().fit(x, y)
 
-    joblib.dump(model, model_dir / "regression_model.joblib")
+    joblib.dump(model, model_dir / "sample_model.joblib")
     (model_dir / "model_version.txt").write_text("vtest", encoding="utf-8")
     return model_dir
 
@@ -41,10 +45,13 @@ def test_load_via_model_artifact_uri_local_dir_and_version_override(tmp_path, mo
     """MODEL_ARTIFACT_URI + MODEL_VERSION when model_version.txt is absent."""
     model_dir = tmp_path / "from_uri"
     model_dir.mkdir()
-    x = np.array([[20, 50.0, 1], [40, 80.0, 5]])
+    x = pd.DataFrame(
+        [[20, 50.0, 1], [40, 80.0, 5]],
+        columns=["age", "income_k", "tenure_years"],
+    )
     y = np.array([30000.0, 60000.0])
     model = LinearRegression().fit(x, y)
-    joblib.dump(model, model_dir / "regression_model.joblib")
+    joblib.dump(model, model_dir / "sample_model.joblib")
     # No model_version.txt — version comes from env
     monkeypatch.setenv("MODEL_ARTIFACT_URI", str(model_dir))
     monkeypatch.setenv("MODEL_VERSION", "v-from-env")
@@ -59,13 +66,16 @@ def test_load_via_model_artifact_uri_local_dir_and_version_override(tmp_path, mo
 
 
 def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
-    """Local tarball path containing regression_model.joblib + model_version.txt."""
+    """Local tarball path containing sample_model.joblib + model_version.txt."""
     inner = tmp_path / "bundle"
     inner.mkdir()
-    x = np.array([[20, 50.0, 1], [40, 80.0, 5]])
+    x = pd.DataFrame(
+        [[20, 50.0, 1], [40, 80.0, 5]],
+        columns=["age", "income_k", "tenure_years"],
+    )
     y = np.array([30000.0, 60000.0])
     model = LinearRegression().fit(x, y)
-    joblib.dump(model, inner / "regression_model.joblib")
+    joblib.dump(model, inner / "sample_model.joblib")
     (inner / "model_version.txt").write_text("v-tar", encoding="utf-8")
 
     tar_path = tmp_path / "model.tar.gz"

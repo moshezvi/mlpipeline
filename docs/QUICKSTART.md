@@ -26,13 +26,13 @@ python training/train.py --output-dir runs/artifacts
 ```
 
 This writes:
-- `runs/artifacts/regression_model.joblib`
+- `runs/artifacts/sample_model.joblib`
 - `runs/artifacts/metrics.json`
 - `runs/artifacts/model_version.txt`
 
 ### 3) Run Flask API locally
 ```bash
-python api/app.py
+python -m api.app
 ```
 
 Test:
@@ -48,7 +48,7 @@ Sample Output:
 
 Health check:
 ```bash
-curl GET http://localhost:8080/health
+curl http://localhost:8080/health
 ```
 Sample Output:
 ```bash
@@ -57,8 +57,8 @@ Sample Output:
 
 ### 4) Run with Docker
 ```bash
-docker build -t mlpipeline-takehome .
-docker run --rm -p 8080:8080 mlpipeline-takehome
+docker build -f local.Dockerfile -t mlpipeline-api:local .
+docker run --rm -p 8080:8080 mlpipeline-api:local
 ```
 
 

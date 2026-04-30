@@ -81,12 +81,12 @@ def train_and_log(args: argparse.Namespace, df: pd.DataFrame) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Train and version regression model.")
+    parser = argparse.ArgumentParser(description="Train and version sample model.")
     parser.add_argument("--data-uri", type=str, default=None)
     parser.add_argument("--samples", type=int, default=200)
     parser.add_argument("--random-seed", type=int, default=42)
     parser.add_argument("--output-dir", type=str, default="runs/artifacts")
-    parser.add_argument("--experiment-name", type=str, default="mlpipeline-takehome")
+    parser.add_argument("--experiment-name", type=str, default="mlpipeline-sample")
     args = parser.parse_args()
     if args.samples <= 0:
         raise ValueError("--samples must be > 0")

@@ -18,7 +18,7 @@ def resolve_next_model_version(runs_dir: Path) -> str:
 
 
 def build_dir_structure(output_dir: Path, model_version: str) -> dict[str, Path]:
-    model_name = "regression_model"
+    model_name = "sample_model"
     runs_dir = output_dir / "runs"
     latest_dir = output_dir / "latest"
     runs_dir.mkdir(parents=True, exist_ok=True)

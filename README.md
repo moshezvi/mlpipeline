@@ -83,6 +83,7 @@ mlpipeline/
 ├── .github/workflows/train.yml
 ├── .github/workflows/inference.yml
 ├── Dockerfile
+├── local.Dockerfile
 ├── inference.Dockerfile
 ├── requirements.txt
 ├── README.md
@@ -121,7 +122,7 @@ Linting and the full unit test suite run on every PR and push to `main` via `.gi
 **Product-specific CI (path-filtered):**
 
 - **`.github/workflows/train.yml`** — On changes under `training/`, `tests/test_training.py`, shared `tests/conftest.py`, or `requirements.txt`: runs `pytest tests/test_training.py` and a small end-to-end `train.py` smoke. **workflow_dispatch** runs the manual submit flow (local train or AWS placeholders).
-- **`.github/workflows/inference.yml`** — On changes under `api/`, `tests/test_api.py`, `inference.Dockerfile`, etc.: runs `pytest tests/test_api.py`, an API import check, and `docker build -f inference.Dockerfile`. **workflow_dispatch** builds a tagged image and uploads build metadata.
+- **`.github/workflows/inference.yml`** — On changes under `api/`, `tests/test_api.py`, `inference.Dockerfile`, etc.: runs `pytest tests/test_api.py` and `docker build -f inference.Dockerfile`. **workflow_dispatch** builds a tagged image and uploads build metadata.
 
 The repo-root **`Dockerfile`** (optional all-in-one image) is not built in CI; only **`inference.Dockerfile`** is exercised in the inference workflow.
 
@@ -134,11 +135,11 @@ python training/train.py --output-dir runs/artifacts
 Training writes immutable run outputs and updates a latest alias:
 
 - `runs/artifacts/runs/vNNN/`
-  - `regression_model.joblib`
+  - `sample_model.joblib`
   - `metrics.json`
   - `model_version.txt`
 - `runs/artifacts/latest/`
-  - `regression_model.joblib`
+  - `sample_model.joblib`
   - `metrics.json`
   - `model_version.txt`
   - `manifest.json`
@@ -169,7 +170,7 @@ Training code is split into small modules under `training/`:
 ### 3) Run inference API locally
 
 ```bash
-python api/app.py
+python -m api.app
 ```
 
 Endpoints:
@@ -190,8 +191,8 @@ Structured logs are JSON lines on stdout (`latency_ms`, `request_id`, etc.; see 
 ### 4) Run with Docker
 
 ```bash
-docker build -t mlpipeline-takehome .
-docker run --rm -p 8080:8080 mlpipeline-takehome
+docker build -f local.Dockerfile -t mlpipeline-api:local .
+docker run --rm -p 8080:8080 mlpipeline-api:local
 ```
 
 ### 5) Inference image/release flow (skeleton)
@@ -210,7 +211,7 @@ docker run --rm -p 8080:8080 mlpipeline-takehome
 - Reproducible training entrypoint: `training/train.py`
 - Model artifact + params + metrics logging: MLflow (local file backend)
 - Prediction API: `api/app.py` with validation and model version response
-- Dockerized API: `Dockerfile`
+- Dockerized API (local verification): `local.Dockerfile`
 - Repo-wide lint + tests: `.github/workflows/validation.yml`; training/inference checks + images: `train.yml` / `inference.yml` (see Development → CI above)
 - Monitoring design: `docs/plans/monitoring.md`
 - Trade-offs and limitations: `docs/plans/tradeoffs.md`
