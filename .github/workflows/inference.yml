@@ -49,10 +49,9 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Inference unit tests
-        run: pytest -q tests/test_api.py
-
-      - name: API import smoke check
-        run: python -c "from api.app import app; print(app.url_map)"
+        run: |
+          echo "tests/test_api.py covers API behavior and model-loading paths (local MODEL_DIR and MODEL_ARTIFACT_URI variants)."
+          pytest -q tests/test_api.py
 
       - name: Build inference Docker image
         run: |
@@ -74,7 +73,9 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Inference unit tests
-        run: pytest -q tests/test_api.py
+        run: |
+          echo "tests/test_api.py covers API behavior and model-loading paths (local MODEL_DIR and MODEL_ARTIFACT_URI variants)."
+          pytest -q tests/test_api.py
 
       - name: Resolve image metadata
         run: |
