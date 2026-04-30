@@ -19,7 +19,7 @@ on:
       - "api/**"
       - "tests/test_api.py"
       - "tests/conftest.py"
-      - "inference.Dockerfile"
+      - "Dockerfile.inference"
       - "requirements.txt"
       - ".github/workflows/inference.yml"
   push:
@@ -28,7 +28,7 @@ on:
       - "api/**"
       - "tests/test_api.py"
       - "tests/conftest.py"
-      - "inference.Dockerfile"
+      - "Dockerfile.inference"
       - "requirements.txt"
       - ".github/workflows/inference.yml"
 
@@ -55,7 +55,7 @@ jobs:
 
       - name: Build inference Docker image
         run: |
-          docker build -f inference.Dockerfile -t mlpipeline-inference:ci .
+          docker build -f Dockerfile.inference -t mlpipeline-inference:ci .
 
   build-inference-image:
     if: github.event_name == 'workflow_dispatch'
@@ -91,7 +91,7 @@ jobs:
       - name: Build model-agnostic inference image
         run: |
           docker build \
-            -f inference.Dockerfile \
+            -f Dockerfile.inference \
             -t "${IMAGE_URI}" .
 
       - name: Emit build metadata artifact

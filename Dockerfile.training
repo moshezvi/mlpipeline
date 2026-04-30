@@ -1,0 +1,11 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY training ./training
+
+# Default training container execution; override args in orchestration as needed.
+CMD ["python", "training/train.py", "--output-dir", "runs/artifacts"]

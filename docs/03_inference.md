@@ -84,7 +84,7 @@ Training writes the same layout under `runs/artifacts/runs/vNNN/` with a `latest
 
 ## Dockerization
 
-### local.Dockerfile
+### Dockerfile.local
 
 Container behavior (local verification path):
 
@@ -126,7 +126,7 @@ curl -X POST http://127.0.0.1:8080/predict \
 ## Run with Docker
 
 ```bash
-docker build -f local.Dockerfile -t mlpipeline-api:local .
+docker build -f Dockerfile.local -t mlpipeline-api:local .
 docker run --rm -p 8080:8080 mlpipeline-api:local
 ```
 

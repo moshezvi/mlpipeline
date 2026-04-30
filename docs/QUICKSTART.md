@@ -57,7 +57,7 @@ Sample Output:
 
 ### 4) Run with Docker
 ```bash
-docker build -f local.Dockerfile -t mlpipeline-api:local .
+docker build -f Dockerfile.local -t mlpipeline-api:local .
 docker run --rm -p 8080:8080 mlpipeline-api:local
 ```
 

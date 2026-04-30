@@ -27,7 +27,7 @@ Deliver a minimal, production-oriented workflow for the assignment:
 - Logged artifact, parameters, and evaluation metric.
 - `api/app.py` with `POST /predict`.
 - Response includes `{ "prediction": ..., "model_version": ... }`.
-- `Dockerfile` and local run instructions in `README.md`.
+- `Dockerfile.local` and local run instructions in `README.md`.
 - `.github/workflows/ci.yml` (or `plans/cicd-design.md` with YAML snippets).
 - `docs/plans/monitoring.md` describing latency/error/model/drift monitoring.
 - `docs/plans/tradeoffs.md` with known limitations.
@@ -75,7 +75,7 @@ Deliver a minimal, production-oriented workflow for the assignment:
 - `training/requirements.txt` (or root `requirements.txt`)
 - `api/app.py`
 - `api/model_loader.py`
-- `Dockerfile`
+- `Dockerfile.local`
 - `.github/workflows/ci.yml`
 - `docs/plans/monitoring.md`
 - `docs/plans/tradeoffs.md`
