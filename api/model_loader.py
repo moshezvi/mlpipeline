@@ -34,12 +34,24 @@ def _find_model_root(search_root: Path) -> Path:
     )
 
 
+def _ensure_safe_tar_member(member: tarfile.TarInfo, dest: Path) -> None:
+    if member.issym() or member.islnk() or member.isdev():
+        raise ValueError(f"Unsafe tar member type in model artifact: {member.name!r}")
+
+    dest_root = dest.resolve()
+    target = (dest / member.name).resolve(strict=False)
+    if os.path.commonpath([str(dest_root), str(target)]) != str(dest_root):
+        raise ValueError(f"Unsafe tar member path in model artifact: {member.name!r}")
+
+
 def _extract_tarball(archive: Path, dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:*") as tf:
         if sys.version_info >= (3, 12):
             tf.extractall(dest, filter="data")
         else:
+            for member in tf.getmembers():
+                _ensure_safe_tar_member(member, dest)
             tf.extractall(dest)
     return _find_model_root(dest)
 
