@@ -100,10 +100,12 @@ def test_model_artifact_tarball_rejects_path_traversal(tmp_path, monkeypatch):
     monkeypatch.setenv("MODEL_ARTIFACT_URI", str(tar_path))
     monkeypatch.setenv("MODEL_DIR", str(tmp_path / "staging"))
 
-    from api.model_loader import resolve_model_directory
+    from api import model_loader
+
+    monkeypatch.setattr(model_loader.sys, "version_info", (3, 11))
 
     with pytest.raises(ValueError, match="Unsafe tar member path"):
-        resolve_model_directory()
+        model_loader.resolve_model_directory()
     assert not outside.exists()
 
 
