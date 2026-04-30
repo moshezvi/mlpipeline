@@ -1,10 +1,12 @@
 import importlib
+import io
 import sys
 import tarfile
 from pathlib import Path
 
 import joblib
 import numpy as np
+import pytest
 from sklearn.linear_model import LinearRegression
 
 
@@ -84,6 +86,27 @@ def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     client = app_module.app.test_client()
 
     assert client.get("/health").get_json()["model_version"] == "v-tar"
+
+
+def test_model_artifact_tarball_rejects_path_traversal(tmp_path, monkeypatch):
+    outside = tmp_path / "escaped.txt"
+    tar_path = tmp_path / "malicious.tar"
+    with tarfile.open(tar_path, "w") as tf:
+        info = tarfile.TarInfo("../escaped.txt")
+        payload = b"overwritten"
+        info.size = len(payload)
+        tf.addfile(info, fileobj=io.BytesIO(payload))
+
+    monkeypatch.setenv("MODEL_ARTIFACT_URI", str(tar_path))
+    monkeypatch.setenv("MODEL_DIR", str(tmp_path / "staging"))
+
+    from api import model_loader
+
+    monkeypatch.setattr(model_loader.sys, "version_info", (3, 11))
+
+    with pytest.raises(ValueError, match="Unsafe tar member path"):
+        model_loader.resolve_model_directory()
+    assert not outside.exists()
 
 
 def test_predict_valid_and_invalid_payloads(tmp_path, monkeypatch):
