@@ -16,6 +16,8 @@
 - Push-to-main release trigger keeps flow simple and consistent, but offers less explicit manual approval control than a gated promote job.
 - Training containerization improves reproducibility and portability, but adds image build/push overhead and registry dependency.
 - Model-agnostic inference images simplify reuse and rollback, but add runtime dependency on external model artifact availability.
+- Promoting immutable artifact versions improves traceability and rollback confidence, but requires stronger metadata discipline and explicit provenance tracking.
+- Manual approval before production promotion improves control and auditability, but adds operational latency versus fully automated promotion.
 
 ## Limitations
 - No persistent model registry backend configured beyond local artifacts.
@@ -29,3 +31,4 @@
 - Add real monitoring backend and alert routing.
 - Add explicit release gates/approvals if stricter change control is required.
 - Add non-production ECR push smoke verification to catch auth/policy drift before mainline release.
+- Add a first-class promotion record (who approved, when, from staging candidate to production artifact URI/version).

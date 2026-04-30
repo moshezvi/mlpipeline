@@ -203,3 +203,16 @@ Current choices in this repository:
 5. Gate promotions with quality checks + integration smoke tests.
 6. Deploy inference service with environment-specific runtime model references and secrets.
 7. Add production observability: latency/error SLOs, drift checks, post-deploy quality monitoring.
+
+### Stage-to-prod promotion model
+
+Promotion should move an immutable model artifact/version from staging to production, not a mutable `latest` pointer.
+
+1. Train and package a candidate artifact with `manifest.json` and quality metrics.
+2. Register the staging candidate with provenance (`model_version`, artifact URI, git SHA, training run id, image tag).
+3. Run stage gates (metric guardrails, API contract smoke checks, deployment health checks).
+4. Require manual approval before production promotion.
+5. Promote by updating production runtime model reference (`MODEL_ARTIFACT_URI` and optional `MODEL_VERSION`) to the approved artifact.
+6. Run post-promotion verification (`/health`, latency/error SLOs) and roll back to the prior artifact reference if checks fail.
+
+This keeps deployment artifacts immutable and auditable, while avoiding per-model inference image rebuilds.
