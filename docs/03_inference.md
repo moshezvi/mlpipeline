@@ -71,7 +71,7 @@ Logs are **structured JSON** (one object per line on **stdout**) with fields suc
 - **`predict_validation_error`** — bad JSON, missing fields, or non-numeric features: `request_id`, `reason`, `model_version`
 - **`predict_inference_error`** — model/runtime failure: `request_id`, `traceback`, `model_version`
 
-In production on AWS, an **agent or log driver** (for example ECS **`awslogs`**, or **Fluent Bit** on EKS) collects these stdout lines and forwards them to **CloudWatch Logs**; the app does not call the CloudWatch API directly. See `docs/plans/monitoring.md` for the short design note.
+In production on AWS, an **agent or log driver** (for example ECS **`awslogs`**, or **Fluent Bit** on EKS) collects these stdout lines and forwards them to **CloudWatch Logs**; the app does not call the CloudWatch API directly. See `docs/04_monitoring.md` for the short design note.
 
 ## Artifact Contract Used by API
 
@@ -98,6 +98,16 @@ Container behavior (local verification path):
 Environment variable used by the app in this local image:
 
 - `MODEL_DIR=/app/runs/artifacts/latest`
+
+### Dockerfile.inference
+
+Deployment-oriented, model-agnostic image behavior:
+
+- copies only `api/` (no baked model artifacts)
+- keeps model reference external at runtime via:
+  - `MODEL_ARTIFACT_URI` (for example S3 URI or mounted path)
+  - `MODEL_VERSION` (optional override when no version file is present)
+- used by `.github/workflows/inference.yml` for CI/release image build.
 
 ### `.dockerignore`
 

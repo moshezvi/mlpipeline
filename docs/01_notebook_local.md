@@ -1,13 +1,14 @@
 # Local Notebook Guide
 
 This guide is only for running and understanding `notebooks/infra-takehome.ipynb`.
+It is an exploratory local workflow (separate from the production-oriented `training/train.py` and CI pipelines).
 
 ## 1) Create and activate a Python virtual environment
 
 From the repo root:
 
 ```bash
-python3 -m venv .venv
+python -m venv .venv
 source .venv/bin/activate
 ```
 
@@ -18,7 +19,7 @@ python --version
 which python
 ```
 
-## 2) Install only notebook dependencies
+## 2) Install notebook dependencies
 
 Install the packages used by the notebook imports:
 
@@ -50,3 +51,10 @@ In Jupyter, navigate to:
 `notebooks/infra-takehome.ipynb`
 
 Then run cells top-to-bottom.
+
+## Notes
+
+- The notebook file name keeps the original take-home naming (`infra-takehome.ipynb`) for traceability.
+- Current productionized training/inference flows are documented in:
+  - `docs/02_training.md`
+  - `docs/03_inference.md`

@@ -29,8 +29,8 @@ Deliver a minimal, production-oriented workflow for the assignment:
 - Response includes `{ "prediction": ..., "model_version": ... }`.
 - `Dockerfile.local` and local run instructions in `README.md`.
 - `.github/workflows/ci.yml` (or `plans/cicd-design.md` with YAML snippets).
-- `docs/plans/monitoring.md` describing latency/error/model/drift monitoring.
-- `docs/plans/tradeoffs.md` with known limitations.
+- `docs/04_monitoring.md` describing latency/error/model/drift monitoring.
+- `docs/05_tradeoffs.md` with known limitations.
 
 ## Recommended implementation order
 ### Step 1 - Training + versioning (60-90 min)
@@ -77,8 +77,8 @@ Deliver a minimal, production-oriented workflow for the assignment:
 - `api/model_loader.py`
 - `Dockerfile.local`
 - `.github/workflows/ci.yml`
-- `docs/plans/monitoring.md`
-- `docs/plans/tradeoffs.md`
+- `docs/04_monitoring.md`
+- `docs/05_tradeoffs.md`
 
 ## Acceptance criteria (aligned to rubric)
 - Reproducible training run produces model artifact.
