@@ -12,8 +12,9 @@ Phase 1: Notebook to runnable workflow
   - model version,
   - metrics,
   - manifest/supporting metadata.
-- Added a simple model quality guardrail:
-  - compare RMSE against a baseline,
+- Added quality evaluation (`evaluate_quality` in modeling):
+  - compare RMSE against a mean predictor baseline,
+  - emit `passed_quality_evaluation` as the acceptance flag,
   - proof of concept for model acceptance checks.
 - Built Flask API around the artifact:
   - `/health`,
@@ -144,7 +145,7 @@ Phase 5: Monitoring and observability
 - These could go to CloudWatch for dashboards/alerts.
 - Model quality:
   - is the model still good?
-  - training RMSE guardrail,
+  - training RMSE vs baseline (`passed_quality_evaluation`),
   - future production RMSE once labels arrive,
   - input drift,
   - prediction drift.

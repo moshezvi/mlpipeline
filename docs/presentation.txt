@@ -11,11 +11,11 @@ and turned it into a reproducible training path. The goal there was that someone
 could run a script and consistently produce the actual `sample_model.joblib`
 artifact, along with the model version, metrics, and supporting metadata.
 
-One thing I added that was not really part of the original notebook was the idea
-of a model quality guardrail. I kept it intentionally simple: compare the model's
-root mean squared error against a baseline error. It is not meant to be a
-sophisticated evaluation strategy, but it shows where model acceptance checks
-would live before promoting or deploying a model.
+One thing I added that was not really part of the original notebook was explicit
+quality evaluation (`evaluate_quality`): compare the model's root mean squared
+error against a mean predictor baseline and record `passed_quality_evaluation`.
+It is not meant to be a sophisticated evaluation strategy, but it shows where
+model acceptance checks would live before promoting or deploying a model.
 
 From there, I built the API layer around that artifact. The API loads the trained
 model, exposes a health endpoint, and exposes a prediction endpoint that accepts
@@ -187,10 +187,11 @@ produced.
 
 The second layer is model quality. That is a different question: not "is the
 service up," but "is the model still good." During training, I added a simple
-guardrail that compares RMSE against a baseline. In production, once labels are
-available, I would extend that idea by calculating model performance over time
-and comparing it to the baseline. I would also monitor input drift and prediction
-drift, because the model can become stale even if the API is perfectly healthy.
+quality evaluation that compares RMSE against a baseline and sets
+`passed_quality_evaluation`. In production, once labels are available, I would
+extend that idea by calculating model performance over time and comparing it to
+the baseline. I would also monitor input drift and prediction drift, because the
+model can become stale even if the API is perfectly healthy.
 
 The third layer is tracking and lineage. That is where MLflow fits in this
 project. MLflow is not really runtime monitoring; it is more about recording the

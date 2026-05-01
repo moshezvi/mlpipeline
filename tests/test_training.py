@@ -49,7 +49,7 @@ def test_training_writes_metrics_contract(tmp_path, monkeypatch):
         "model_version",
         "rmse",
         "baseline_rmse",
-        "passed_guardrail",
+        "passed_quality_evaluation",
         "training_time_seconds",
     }
     assert required_keys.issubset(metrics.keys())

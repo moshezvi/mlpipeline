@@ -50,10 +50,10 @@ def train_and_log(args: argparse.Namespace, df: pd.DataFrame) -> None:
     model, computed_metrics = train_model_and_metrics(df)
     logger.info("Model trained: RMSE=%.4f", computed_metrics["rmse"])
     logger.info(
-        "Computed metrics: rmse=%.4f, baseline_rmse=%.4f, passed_guardrail=%s",
+        "Computed metrics: rmse=%.4f, baseline_rmse=%.4f, passed_quality_evaluation=%s",
         computed_metrics["rmse"],
         computed_metrics["baseline_rmse"],
-        computed_metrics["passed_guardrail"],
+        computed_metrics["passed_quality_evaluation"],
     )
 
     git_commit = get_git_commit()
@@ -61,7 +61,7 @@ def train_and_log(args: argparse.Namespace, df: pd.DataFrame) -> None:
         "model_version": model_version,
         "rmse": computed_metrics["rmse"],
         "baseline_rmse": computed_metrics["baseline_rmse"],
-        "passed_guardrail": computed_metrics["passed_guardrail"],
+        "passed_quality_evaluation": computed_metrics["passed_quality_evaluation"],
         "training_time_seconds": computed_metrics["training_time_seconds"],
     }
     if git_commit:
@@ -75,7 +75,7 @@ def train_and_log(args: argparse.Namespace, df: pd.DataFrame) -> None:
     logger.info("Saved run artifacts to: %s", paths["run_dir"])
     logger.info("Updated latest artifacts in: %s", paths["latest_dir"])
     logger.info("Emitted manifest at: %s", paths["latest_manifest_path"])
-    logger.info("Manifest guardrail status: %s", manifest["passed_guardrail"])
+    logger.info("Manifest quality evaluation: %s", manifest["passed_quality_evaluation"])
     logger.info("Model version: %s", model_version)
     logger.info("Training log file: %s", log_path)
 

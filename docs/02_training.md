@@ -18,9 +18,9 @@ High-level flow:
    and target:
    - `target`
 5. Train `LinearRegression` on that data.
-6. Compute:
-   - `rmse`
-   - `baseline_rmse` (mean predictor baseline)
+6. Run `evaluate_quality` in `training/modeling.py` to compute:
+   - `rmse` and `baseline_rmse` (mean predictor on the same rows)
+   - `passed_quality_evaluation` (model RMSE must beat the baseline by a margin; currently `rmse < 0.95 * baseline_rmse`)
 7. Save run artifacts and update latest artifacts.
 8. Emit a training manifest (`manifest.json`) for release handoff.
 9. Log params, metrics, and artifacts to MLflow.
@@ -61,7 +61,11 @@ In `runs/artifacts/`:
 - `model_version`
 - `rmse`
 - `baseline_rmse`
+- `passed_quality_evaluation`
+- `training_time_seconds`
 - `git_commit` (when available)
+
+`manifest.json` includes `passed_quality_evaluation` for downstream gates.
 
 In `logs/`:
 

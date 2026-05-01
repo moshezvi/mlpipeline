@@ -66,7 +66,7 @@ def emit_manifest(
         "model_version": model_version,
         "model_path": str(paths["latest_model_path"]),
         "metrics_path": str(paths["latest_metrics_path"]),
-        "passed_guardrail": bool(metrics_payload["passed_guardrail"]),
+        "passed_quality_evaluation": bool(metrics_payload["passed_quality_evaluation"]),
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
     }
     if "git_commit" in metrics_payload:
