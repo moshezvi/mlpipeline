@@ -1,0 +1,177 @@
+Phase 1: Notebook to runnable workflow
+
+- Treated the notebook as the source of truth.
+- Ran it locally in Jupyter to understand:
+  - generated data,
+  - expected features,
+  - training logic,
+  - produced artifact.
+- Pulled notebook logic into a reproducible training script.
+- Training now produces:
+  - `sample_model.joblib`,
+  - model version,
+  - metrics,
+  - manifest/supporting metadata.
+- Added a simple model quality guardrail:
+  - compare RMSE against a baseline,
+  - proof of concept for model acceptance checks.
+- Built Flask API around the artifact:
+  - `/health`,
+  - `/predict`,
+  - JSON input,
+  - prediction plus model version.
+- Dockerized local serving and verified it works outside my local Python env.
+- Added quality layer:
+  - Ruff,
+  - unit tests,
+  - smoke tests.
+- Added initial GitHub Actions validation workflow:
+  - proves checks run in a clean CI environment,
+  - not just on my machine.
+
+Phase 2: Separate training and inference
+
+- Real systems should not treat training and inference as one thing.
+- They have different:
+  - lifecycles,
+  - runtime needs,
+  - failure modes.
+- Training side:
+  - looked at SageMaker because it was mentioned in the assignment,
+  - wanted consistency, repeatability, and future retraining.
+- CI should validate/package/trigger, not run real heavy training.
+- Real training may need:
+  - larger CPU,
+  - GPU,
+  - more memory,
+  - production data access.
+- SageMaker training job fits this:
+  - trigger from code changes,
+  - or trigger from fresh data events.
+- Training contract:
+  - code version,
+  - data input,
+  - config,
+  - versioned model artifact,
+  - metrics.
+- Added `Dockerfile.training`:
+  - packages training code and dependencies,
+  - repeatable across local, CI, and managed training.
+- Training image does not create model by itself:
+  - it must run as a job with data, output paths, compute config, metadata.
+- Added `--data-uri`:
+  - synthetic data remains useful locally,
+  - external data path makes retraining realistic.
+
+Phase 3: Inference path and model-agnostic image
+
+- Added inference side:
+  - Flask API,
+  - health endpoint,
+  - prediction endpoint,
+  - inference Dockerfile.
+- Local Dockerfile can bake in the model:
+  - useful for local testing.
+- Deployment inference image is model agnostic.
+- Reason:
+  - if model is baked into image, every new model requires image rebuild/redeploy.
+  - with retraining from SageMaker or data events, new models may appear without code changes.
+  - forcing retraining to trigger CI image builds creates unnecessary coupling.
+- Instead:
+  - inference image loads model at startup,
+  - model location comes from environment, e.g. `MODEL_ARTIFACT_URI`.
+- This required model loader changes:
+  - local directory,
+  - packaged artifact,
+  - external location such as S3.
+- Benefit:
+  - stable image,
+  - smaller image,
+  - fewer rebuilds,
+  - promotion is updating model reference, not rebuilding image.
+- Trade-off:
+  - baked model may be simpler at startup,
+  - but image is heavier.
+  - model-agnostic image stays light; model can be read from storage optimized for reads, like S3.
+
+Phase 4: Revisited CI
+
+- Originally had one validation workflow:
+  - linting,
+  - tests,
+  - basic quality gate.
+- As architecture split, CI split too.
+- Validation workflow:
+  - repo-wide quality gate.
+- Training workflow:
+  - training tests,
+  - smoke test for artifact contract,
+  - production-oriented path is a handoff to managed training infrastructure.
+- Inference workflow:
+  - API tests,
+  - builds inference Docker image.
+- Promotion workflow:
+  - lightweight staging-to-production handoff,
+  - promotes model version plus immutable artifact URI,
+  - records approval metadata,
+  - uploads audit artifact,
+  - no real cloud deployment in take-home.
+- Connects to model-agnostic inference:
+  - promotion updates runtime model reference,
+  - does not rebuild API image.
+- Why this split matters:
+  - training change does not automatically mean inference image rebuild,
+  - API change does not automatically mean model retraining,
+  - CI mirrors system boundaries.
+
+Phase 5: Monitoring and observability
+
+- Monitoring an ML system is not one thing.
+- Operational observability:
+  - is the system running?
+  - `/health`,
+  - latency,
+  - request volume,
+  - error rates,
+  - training job success/failure,
+  - expected artifacts produced.
+- API emits structured logs:
+  - request id,
+  - status code,
+  - latency,
+  - prediction timing,
+  - model version.
+- These could go to CloudWatch for dashboards/alerts.
+- Model quality:
+  - is the model still good?
+  - training RMSE guardrail,
+  - future production RMSE once labels arrive,
+  - input drift,
+  - prediction drift.
+- Tracking and lineage:
+  - MLflow records artifact, params, metrics, version.
+  - MLflow is a tool choice for this take-home.
+  - In AWS, SageMaker Experiments or another managed system could fill that role.
+- Key point:
+  - logs tell whether system runs,
+  - model checks tell whether predictions are trustworthy,
+  - tracking explains where each model came from.
+
+Additional design note: reusable training infrastructure
+
+- Split training code instead of one large `train.py`.
+- `train.py` is entry point.
+- Reusable modules:
+  - data loading,
+  - modeling/metrics,
+  - artifact layout,
+  - logging,
+  - tracking.
+- Forward-looking idea:
+  - extract common training infrastructure into shared internal package.
+- Benefit:
+  - standard artifact contracts,
+  - consistent metrics/logging/versioning,
+  - easier to test platform code once,
+  - cleaner boundary between research code and platform code,
+  - researchers keep flexibility in model logic.

@@ -20,6 +20,7 @@ The notebook walkthrough (`docs/01_notebook_local.md`) is retained as an explora
 | `.github/workflows/validation.yml` | Repo-wide quality gate |
 | `.github/workflows/train.yml` | Training CI + submit workflow |
 | `.github/workflows/inference.yml` | Inference CI + image release workflow |
+| `.github/workflows/promote.yml` | Mock staging-to-production model promotion workflow |
 
 ## Architecture at a glance
 
@@ -39,12 +40,10 @@ flowchart TD
       end
 
       subgraph trainRelease [Release]
-        trainMain[Push to main]
-        trainBuild[Build training Docker image]
-        trainEcr[Upload image to ECR]
-        trainPipeline[Submit image to AWS training pipeline]
+        trainDispatch[workflow_dispatch release handoff]
         trainContract[training_submission.json]
-        trainMain --> trainBuild --> trainEcr --> trainPipeline --> trainContract
+        trainManaged[Managed training job contract design-level]
+        trainDispatch --> trainContract --> trainManaged
       end
 
     end
@@ -59,17 +58,18 @@ flowchart TD
       end
 
       subgraph inferRelease [Release]
-        inferMain[Push to main]
-        inferBuildRelease[Build inference Docker image]
-        inferEcr[Upload image to ECR]
-        inferMain --> inferBuildRelease --> inferEcr
+        inferDispatch[workflow_dispatch release handoff]
+        inferBuildRelease[Build/tag inference Docker image]
+        inferMeta[inference_build_metadata.json]
+        inferDispatch --> inferBuildRelease --> inferMeta
       end
     end
 
     localDocker[Dockerfile.local] --> localVerify[Locally test /predict & /health]
-    trainRelease --> runtimeModel[Runtime model reference]
+    trainContract --> runtimeModel[Runtime model reference]
+    runtimeModel --> promoteFlow[Promote to prod (manual/gated)]
+    promoteFlow --> InferenceEndpoint
     inferFlow --> InferenceEndpoint[Create/update inference endpoint]
-    runtimeModel --> InferenceEndpoint
 ```
 
 ## Training path
@@ -95,7 +95,7 @@ Active alias under `runs/artifacts/latest/` mirrors the same contract.
 ### CI and orchestration alignment
 
 - **Validate (PR/push)**: `train.yml` runs training checks, training unit tests, and a small CI smoke run (**test-only, no ECR push**).
-- **Release (push to `main`)**: build `Dockerfile.training`, upload image to ECR, and submit that image to the AWS training pipeline.
+- **Release handoff**: `workflow_dispatch` runs the local training path or emits the AWS training submission contract that a managed training release would use.
 - Release handoff artifact: `training_submission.json`.
 
 ### Continuous retraining direction
@@ -104,7 +104,7 @@ The repository is set up for continuous retraining evolution via:
 
 - external data input (`--data-uri`),
 - versioned artifact + manifest contract,
-- push-to-main release contract (build training image -> upload to ECR -> submit to AWS training pipeline),
+- documented release handoff contract (`training_submission.json` + managed training job design-level handoff),
 - explicit SageMaker job/pipeline contract items in Productization section.
 
 ## Inference path
@@ -122,7 +122,7 @@ The repository is set up for continuous retraining evolution via:
 ### CI alignment
 
 - **Validate (PR/push)**: `inference.yml` runs inference checks, inference unit tests, and an inference CI image build (**test-only, no ECR push**).
-- **Release (push to `main`)**: build `Dockerfile.inference` and upload the image to ECR.
+- **Release handoff (`workflow_dispatch`)**: builds/tags `Dockerfile.inference` and emits build metadata; registry push remains placeholder/design-level in this take-home.
 - `Dockerfile.local` is intentionally local-only, not part of inference release CI.
 
 ## Containerization model
@@ -183,6 +183,7 @@ curl -X POST http://127.0.0.1:8080/predict \
 - Dockerized local verification path: `Dockerfile.local`
 - Model-agnostic deploy image path: `Dockerfile.inference`
 - CI split by responsibility: `validation.yml`, `train.yml`, `inference.yml`
+- Mock staging-to-production model promotion workflow: `.github/workflows/promote.yml`
 - Monitoring design: `docs/04_monitoring.md`
 
 ## Productization considerations

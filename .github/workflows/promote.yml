@@ -1,0 +1,92 @@
+name: promote
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_version:
+        description: "Model version to promote (for example v012)"
+        required: true
+      model_artifact_uri:
+        description: "Immutable artifact URI for the candidate model"
+        required: true
+      source_stage:
+        description: "Source stage"
+        required: true
+        default: "staging"
+      target_stage:
+        description: "Target stage"
+        required: true
+        default: "production"
+      approver:
+        description: "Approver identity (mock/manual input for this take-home)"
+        required: true
+
+jobs:
+  promote-model:
+    runs-on: ubuntu-latest
+    env:
+      MODEL_VERSION: ${{ github.event.inputs.model_version }}
+      MODEL_ARTIFACT_URI: ${{ github.event.inputs.model_artifact_uri }}
+      SOURCE_STAGE: ${{ github.event.inputs.source_stage }}
+      TARGET_STAGE: ${{ github.event.inputs.target_stage }}
+      APPROVER: ${{ github.event.inputs.approver }}
+      REQUESTED_BY: ${{ github.actor }}
+      GIT_SHA: ${{ github.sha }}
+      RUN_ID: ${{ github.run_id }}
+    steps:
+      - name: Validate promotion inputs
+        run: |
+          set -euo pipefail
+          if [ -z "$MODEL_VERSION" ]; then
+            echo "model_version is required"
+            exit 1
+          fi
+          if [ -z "$MODEL_ARTIFACT_URI" ]; then
+            echo "model_artifact_uri is required"
+            exit 1
+          fi
+          if [ "$SOURCE_STAGE" = "$TARGET_STAGE" ]; then
+            echo "source_stage and target_stage must differ"
+            exit 1
+          fi
+
+      - name: Mock stage gates
+        run: |
+          echo "Gate 1 (quality): PASS - placeholder"
+          echo "Gate 2 (API contract smoke): PASS - placeholder"
+          echo "Gate 3 (deployment health): PASS - placeholder"
+          echo "In production, these would query real test/monitoring signals."
+
+      - name: Approval note (mock)
+        run: |
+          echo "Approver: $APPROVER"
+          echo "In production, use GitHub Environments required reviewers for enforced approvals."
+
+      - name: Emit promotion record
+        run: |
+          cat > promotion_record.json <<EOF
+          {
+            "model_version": "$MODEL_VERSION",
+            "model_artifact_uri": "$MODEL_ARTIFACT_URI",
+            "source_stage": "$SOURCE_STAGE",
+            "target_stage": "$TARGET_STAGE",
+            "approved_by": "$APPROVER",
+            "requested_by": "$REQUESTED_BY",
+            "git_sha": "$GIT_SHA",
+            "run_id": "$RUN_ID"
+          }
+          EOF
+          cat promotion_record.json
+
+      - name: Mock runtime model reference update
+        run: |
+          echo "Would update target runtime config:"
+          echo "MODEL_VERSION=$MODEL_VERSION"
+          echo "MODEL_ARTIFACT_URI=$MODEL_ARTIFACT_URI"
+          echo "No cloud side effects are performed in this take-home workflow."
+
+      - name: Upload promotion record
+        uses: actions/upload-artifact@v4
+        with:
+          name: promotion-record
+          path: promotion_record.json

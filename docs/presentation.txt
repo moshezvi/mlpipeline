@@ -1,0 +1,240 @@
+Phase 1: Making the notebook runnable as a workflow
+
+I started by treating the notebook as the source of truth.
+
+First, I installed the dependencies, ran the notebook locally in Jupyter, and made
+sure I understood what it was doing: what data it generated, what features the
+model expected, how the model was trained, and what artifact it produced.
+
+Once I understood that baseline, I pulled the training logic out of the notebook
+and turned it into a reproducible training path. The goal there was that someone
+could run a script and consistently produce the actual `sample_model.joblib`
+artifact, along with the model version, metrics, and supporting metadata.
+
+One thing I added that was not really part of the original notebook was the idea
+of a model quality guardrail. I kept it intentionally simple: compare the model's
+root mean squared error against a baseline error. It is not meant to be a
+sophisticated evaluation strategy, but it shows where model acceptance checks
+would live before promoting or deploying a model.
+
+From there, I built the API layer around that artifact. The API loads the trained
+model, exposes a health endpoint, and exposes a prediction endpoint that accepts
+JSON input and returns both the prediction and the model version. That gave me a
+clean separation between training the model and serving the model.
+
+After that, I containerized the serving path and tested it in Docker, so I could
+verify that the API works outside of just my local Python environment.
+
+Then I added the quality layer: linting with Ruff, unit tests, and smoke tests. I
+could have started with that earlier, but at this stage it gave me a useful
+quality gate around the pieces I had already made runnable. That also let me
+start thinking about how this would behave in continuous integration, where every
+change should be checked before it moves forward.
+
+At that point, I also added an initial GitHub Actions validation workflow. The
+purpose was to prove that the repo could be checked from a clean environment, not
+just on my machine. That workflow gave me a basic automated quality gate around
+the code, so the project was not only runnable locally, but also testable through
+CI.
+
+Phase 2: Separating training from inference
+
+In the second phase, I started thinking more about how this would work in a real
+application. In a production system, training and inference usually should not be
+treated as one combined thing. They have different lifecycles, different runtime
+needs, and different failure modes. So the main architectural split I wanted to
+show was a separate training path and a separate inference path.
+
+Starting with training, I looked at SageMaker because it was one of the tools
+mentioned in the take-home. The training side should be consistent and
+repeatable, but I also wanted to leave room for retraining. In other words, this
+should not only train when the model code changes. It should also support the
+case where the code stays the same, but new data arrives and we want to retrain
+so the model does not get stale.
+
+This was also where I wanted to be clear about the role of CI. The notebook and
+the local script are fine for this small model and synthetic data, but in a real
+scenario I would not expect GitHub Actions itself to run the full training job.
+CI can validate the code, build the training image, and trigger the process, but
+real model training may need a larger CPU machine, a GPU machine, more memory, or
+access to production data locations. That was one of the main motivations for
+making training its own path.
+
+That maps well to the SageMaker training-job model. A training job could be
+triggered by code changes, where we are changing or versioning the training
+logic, or it could be triggered by fresh data arriving through some event-driven
+path. The important thing is that the training contract stays clear: given a
+specific code version, data input, and configuration, produce a versioned model
+artifact and metrics.
+
+For consistency, and because SageMaker supports custom containers, I added a
+training Dockerfile. The idea is to package the training code and dependencies
+together so the environment is repeatable across local runs, CI, and eventually
+managed training infrastructure. Then the thing that changes between runs can be
+the input data or configuration, rather than the runtime environment itself.
+
+The training image contains the code and dependencies, but the image by itself
+does not create the model. It still has to be executed as a training job with
+data inputs, output locations, compute configuration, and tracking metadata.
+
+I also modified the training code so it can accept external data through
+`--data-uri`, instead of only relying on the synthetic data generated in the
+original notebook. The synthetic data is still useful for local development and
+smoke tests, but the external data path is what makes retraining more realistic.
+
+Phase 3: Designing the inference path
+
+The third part was when I added the inference side. I kept the inference service
+fairly simple: a Flask API, a health endpoint, a prediction endpoint, and a
+separate inference Dockerfile.
+
+One specific trade-off I made was to keep the deployment-oriented inference image
+model agnostic. What I mean by that is: the local Dockerfile can bundle the model
+artifact directly, which is useful for local testing. Training runs locally,
+creates `sample_model.joblib`, and the Flask application loads that model from
+the local filesystem. That is simple and easy to verify.
+
+But for a real deployment path, baking the model into the inference image creates
+a problem. Every time a new model is trained, we would need to rebuild and
+redeploy the inference image. If models were only created when the code changes,
+that could be handled cleanly by CI. But once retraining can happen through
+SageMaker or through data-driven events, a new model might be produced without
+any code change. In that case, forcing the retraining process to trigger a new
+GitHub Actions image build adds an unnecessary cross-system dependency.
+
+So instead, the inference image is lightweight and loads the model externally at
+startup. The model location is passed through the runtime environment, for
+example with `MODEL_ARTIFACT_URI`. That means a retrained model can be stored in
+S3, or in whatever model artifact store we choose, and the same inference image
+can be restarted with a different model reference.
+
+That also meant a small change in the model loading code. The API can no longer
+assume that the model is always sitting on the local filesystem. The loader first
+resolves where the artifact should come from, and then it can load from a local
+directory, a packaged artifact, or an external location such as S3 before handing
+the model to the Flask app.
+
+The benefit is that the image stays stable, smaller, and reusable. We do not need
+to rebuild it for every model version, and we do not need SageMaker or a data
+pipeline to call back into CI just to produce a new serving image. Promotion
+becomes a matter of updating the runtime model reference, rather than creating a
+new container image every time.
+
+There is a trade-off here. A baked-image model can be simpler at startup because
+the artifact is already inside the container. But the image is heavier, and if we
+scale to many endpoints or replicas, each one has to pull that heavier image from
+the registry. With the model-agnostic approach, the serving image stays light and
+the model artifact is fetched separately from storage that is designed for that
+kind of read pattern, like S3. For this project, that was the trade-off I chose.
+
+Phase 4: Splitting continuous integration by responsibility
+
+After that, I revisited continuous integration. Originally, I had a
+single workflow that ran the validation checks: linting and tests. That was a
+good starting point, because it gave the repo a basic quality gate.
+
+But as the project became more clearly separated into training and inference, I
+wanted the CI structure to reflect that separation too. Training and inference
+have different responsibilities, different artifacts, and different failure
+modes, so I split the workflows by purpose.
+
+The validation workflow stays as the general repo-wide quality gate. Then the
+training workflow focuses on the training path. Locally and in CI, it can run the
+training tests and a small smoke test to prove the training script still works
+and can produce the expected artifact contract. For the production-oriented path,
+the workflow becomes more of a handoff: build or refer to the training container,
+then submit a managed training job to run on the right infrastructure.
+
+Separately, the inference workflow focuses on the serving path. It runs the API
+tests and builds the inference Docker image, so changes to the Flask app or the
+serving container get checked in the context where they matter.
+
+I also added a lightweight promotion workflow to represent the
+staging-to-production step. It does not perform a real cloud deployment, because
+the actual registry and orchestrator are outside the scope of this take-home. But
+it shows the contract I would want: promote an approved model version and
+immutable artifact URI from staging to production, record the approval metadata,
+and leave an audit artifact.
+
+That connects back to the model-agnostic inference design: promotion does not
+have to rebuild the API image. It can update the production runtime model
+reference to point to the approved artifact.
+
+The reason I like this split is that it matches the architecture. A training
+change should not automatically imply that the inference image needs to be
+rebuilt, especially once the inference image is model agnostic. And an API change
+should not automatically imply that the model needs to be retrained. The CI
+structure makes those boundaries explicit.
+
+Phase 5: Monitoring and observability
+
+The last area I thought about was monitoring and observability.
+
+I separated this into a few different concerns, because monitoring an ML system
+is not just one thing.
+
+The first layer is operational observability. That is about whether the system is
+running correctly. For the inference service, that means health checks, request
+latency, request volume, and error rates. The API logs structured events with
+request ids, status codes, latency, prediction timing, and model version, so
+those logs could be shipped to something like CloudWatch and turned into
+dashboards or alerts.
+
+The same idea applies to the training side. I would want to know whether the
+training workflow ran, whether the training job was submitted successfully,
+whether the managed training job failed, and whether the expected artifacts were
+produced.
+
+The second layer is model quality. That is a different question: not "is the
+service up," but "is the model still good." During training, I added a simple
+guardrail that compares RMSE against a baseline. In production, once labels are
+available, I would extend that idea by calculating model performance over time
+and comparing it to the baseline. I would also monitor input drift and prediction
+drift, because the model can become stale even if the API is perfectly healthy.
+
+The third layer is tracking and lineage. That is where MLflow fits in this
+project. MLflow is not really runtime monitoring; it is more about recording the
+model artifact, parameters, metrics, and version information so we can understand
+what was trained, reproduce it, and decide whether it should be promoted.
+
+For this project, I used MLflow because it was one of the allowed interfaces in
+the assignment and it is easy to run locally. But that is a tool choice, not a
+hard architectural dependency. In an AWS-centered implementation, the same role
+could be filled by SageMaker Experiments or another managed model tracking and
+lineage system.
+
+The important part is not specifically MLflow. The important part is that each
+training run records the model artifact, parameters, metrics, model version, and
+enough metadata to understand and reproduce what happened.
+
+So the overall idea is: operational logs tell me whether the system is running,
+model-quality checks tell me whether the predictions are still trustworthy, and
+tracking gives me the history and metadata behind each model version.
+
+Additional design note: reusable training infrastructure
+
+One additional design choice on the training side was how I structured the
+training code.
+
+I did not want everything to live in one large `train.py` file. `train.py` is the
+entry point, but I split the reusable pieces into separate modules: data loading,
+modeling and metrics, artifact layout, logging, and tracking.
+
+For this project, that may look like a small detail, but the reason I did it is
+that in a real ML platform, a lot of training infrastructure should be reusable
+across models. Different researchers or data scientists may train different
+models, but they should not each have to reinvent how artifacts are saved, how
+metrics are logged, how model versions are assigned, or how tracking metadata is
+recorded.
+
+So one possible next step would be to extract some of this into a shared internal
+training package. Then each model-specific project could mainly own its
+`train.py` and its modeling logic, while the common infrastructure around
+versioning, artifact contracts, logging, and tracking stays standardized.
+
+That has a few benefits. It makes training pipelines more consistent across
+teams, it makes the behavior easier to test in one place, and it reduces the
+chance that every model project develops a slightly different version of the same
+infrastructure. It also creates a cleaner boundary between research code and
+platform code: researchers still have flexibility in the model logic, but the
+operational pieces are more repeatable and easier to secure.
