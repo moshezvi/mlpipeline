@@ -15,7 +15,8 @@ Phase 1: Notebook to runnable workflow
 - Added quality evaluation (`evaluate_quality` in modeling):
   - compare RMSE against a mean predictor baseline,
   - emit `passed_quality_evaluation` as the acceptance flag,
-  - proof of concept for model acceptance checks.
+  - proof of concept for model acceptance checks,
+  - future checks could be expanded, e.g. 80/20 train/test split.
 - Built Flask API around the artifact:
   - `/health`,
   - `/predict`,
@@ -46,9 +47,11 @@ Phase 2: Separate training and inference
   - GPU,
   - more memory,
   - production data access.
-- SageMaker training job fits this:
-  - trigger from code changes,
-  - or trigger from fresh data events.
+- SageMaker Pipeline fits this orchestration:
+  - can be triggered by code changes,
+  - can be triggered by fresh data events,
+  - example: S3 ObjectCreated -> EventBridge -> SageMaker Pipeline,
+  - pipeline starts SageMaker Training Job and can include evaluation/registration.
 - Training contract:
   - code version,
   - data input,

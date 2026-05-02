@@ -1,28 +1,34 @@
 flowchart TD
-    %% Code-driven CI workflow
-    A[Developer pushes code] --> B[GitHub Actions CI]
-    B --> C[Run tests and linting]
+    %% Code-driven validation and release handoff
+    A[Developer pushes code or opens PR] --> B[GitHub Actions validation]
+    B --> C[Run linting and tests]
 
-    C --> D[Build training image]
-    D --> E[Push training image to ECR]
-    E --> F[Create or update SageMaker training pipeline]
+    C --> D[Training workflow]
+    D --> E[Training tests and smoke run]
+    E --> F[Release handoff contract]
+    F --> G[Training image plus job configuration]
 
-    C --> G[Build Flask inference image]
-    G --> H[Push Flask inference image to ECR]
-    H --> I[Deploy Flask service]
+    C --> H[Inference workflow]
+    H --> I[API tests]
+    I --> J[Build/tag model-agnostic inference image]
+    J --> K[Inference image metadata]
 
     %% Data-driven training workflow
-    J[New training data lands in S3] --> K[EventBridge trigger]
-    K --> L[Start SageMaker training pipeline]
-    F --> L
-    L --> M[Run training job using training image from ECR]
-    M --> N[Write model.tar.gz to S3 versioned runs path]
-    N --> O[Update latest model artifact or metadata]
+    L[New training data lands in S3] --> M[S3 ObjectCreated event]
+    M --> N[EventBridge rule]
+    N --> O[Start SageMaker Pipeline execution]
+    G --> O
+    O --> P[Preprocess/validate data]
+    P --> Q[Run SageMaker Training Job on managed compute]
+    Q --> R[Evaluate model quality]
+    R --> S[Write versioned model artifact to S3 or registry]
 
-    %% Inference/runtime workflow
-    O --> P[Trigger Flask restart/reload]
-    I --> Q[Flask service starts]
-    P --> Q
-    Q --> R[Download latest model artifact from S3]
-    R --> S[Load model into memory]
-    S --> T[Serve prediction endpoint]
+    %% Promotion and inference runtime
+    S --> T[Promote approved artifact reference]
+    T --> U[Production runtime MODEL_ARTIFACT_URI]
+    K --> V[Deploy/restart inference service]
+    U --> V
+    V --> W[Flask service starts]
+    W --> X[Fetch model artifact from external store]
+    X --> Y[Load model into memory]
+    Y --> Z[Serve /health and /predict]

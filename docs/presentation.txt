@@ -60,12 +60,18 @@ real model training may need a larger CPU machine, a GPU machine, more memory, o
 access to production data locations. That was one of the main motivations for
 making training its own path.
 
-That maps well to the SageMaker training-job model. A training job could be
-triggered by code changes, where we are changing or versioning the training
-logic, or it could be triggered by fresh data arriving through some event-driven
-path. The important thing is that the training contract stays clear: given a
-specific code version, data input, and configuration, produce a versioned model
-artifact and metrics.
+That maps well to a SageMaker Pipeline. The pipeline is the orchestration layer:
+it could be started by code changes, where we are changing or versioning the
+training logic, or it could be started by fresh data arriving through an
+event-driven path. For example, new data could land in S3, an S3 ObjectCreated
+event could be routed through EventBridge, and that could start a SageMaker
+Pipeline execution. The pipeline could then run preprocessing, start the actual
+SageMaker Training Job on the right compute, evaluate the result, and register
+the model artifact.
+
+The important thing is that the training contract stays clear: given a specific
+code version, data input, and configuration, produce a versioned model artifact
+and metrics.
 
 For consistency, and because SageMaker supports custom containers, I added a
 training Dockerfile. The idea is to package the training code and dependencies
