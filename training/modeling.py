@@ -8,6 +8,7 @@ from sklearn.metrics import mean_squared_error
 from training.data import FEATURES, TARGET
 
 
+# Compare the model's RMSE to a baseline where predictions are the mean of the target
 def evaluate_quality(
     y_true: pd.Series | np.ndarray,
     predictions: np.ndarray,
