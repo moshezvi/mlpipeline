@@ -36,11 +36,25 @@ def _find_model_root(search_root: Path) -> Path:
 
 def _extract_tarball(archive: Path, dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
+    dest_root = dest.resolve()
     with tarfile.open(archive, "r:*") as tf:
+        safe_members = []
+        for member in tf.getmembers():
+            member_path = Path(member.name)
+            if member_path.is_absolute() or ".." in member_path.parts:
+                raise ValueError(f"Unsafe path in model artifact tarball: {member.name!r}")
+            target_path = (dest / member.name).resolve()
+            if target_path != dest_root and dest_root not in target_path.parents:
+                raise ValueError(f"Unsafe path in model artifact tarball: {member.name!r}")
+            if not (member.isfile() or member.isdir()):
+                raise ValueError(
+                    f"Unsupported tar entry type in model artifact tarball: {member.name!r}"
+                )
+            safe_members.append(member)
         if sys.version_info >= (3, 12):
-            tf.extractall(dest, filter="data")
+            tf.extractall(dest, members=safe_members, filter="data")
         else:
-            tf.extractall(dest)
+            tf.extractall(dest, members=safe_members)
     return _find_model_root(dest)
 
 
