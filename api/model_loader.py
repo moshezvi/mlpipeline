@@ -11,7 +11,8 @@ from urllib.parse import urlparse
 
 import joblib
 
-MODEL_BASENAME = "sample_model.joblib"
+MODEL_BASENAMES = ("sample_model.joblib", "regression_model.joblib")
+MODEL_BASENAME = MODEL_BASENAMES[0]
 VERSION_BASENAME = "model_version.txt"
 
 
@@ -22,16 +23,26 @@ def _is_tarball(path: Path) -> bool:
     return name.endswith(".tar.gz") or name.endswith(".tgz") or name.endswith(".tar")
 
 
-def _find_model_root(search_root: Path) -> Path:
-    direct = search_root / MODEL_BASENAME
-    if direct.is_file():
-        return search_root
-    for p in search_root.rglob(MODEL_BASENAME):
-        if p.is_file():
-            return p.parent
+def _expected_model_names() -> str:
+    return " or ".join(MODEL_BASENAMES)
+
+
+def _find_model_path(search_root: Path) -> Path:
+    for basename in MODEL_BASENAMES:
+        direct = search_root / basename
+        if direct.is_file():
+            return direct
+    for basename in MODEL_BASENAMES:
+        for p in search_root.rglob(basename):
+            if p.is_file():
+                return p
     raise FileNotFoundError(
-        f"{MODEL_BASENAME} not found under {search_root} (after extract or download)"
+        f"{_expected_model_names()} not found under {search_root} (after extract or download)"
     )
+
+
+def _find_model_root(search_root: Path) -> Path:
+    return _find_model_path(search_root).parent
 
 
 def _extract_tarball(archive: Path, dest: Path) -> Path:
@@ -77,10 +88,11 @@ def _materialize_uri_to_model_root(uri: str, model_dir: Path) -> Path:
             result = _extract_tarball(local_file, extract_root)
             local_file.unlink(missing_ok=True)
             return result
-        if local_file.name == MODEL_BASENAME:
+        if local_file.name in MODEL_BASENAMES:
             return local_file.parent
         raise FileNotFoundError(
-            f"After S3 download, expected {MODEL_BASENAME} or a tarball, got {local_file.name}"
+            f"After S3 download, expected {_expected_model_names()} or a tarball, "
+            f"got {local_file.name}"
         )
 
     raw = uri.replace("file://", "").strip()
@@ -119,10 +131,7 @@ def resolve_model_directory() -> Path:
 
 def load_model(artifacts_dir: str):
     base = Path(artifacts_dir)
-    model_path = base / MODEL_BASENAME
-
-    if not model_path.is_file():
-        raise FileNotFoundError(f"Model file not found: {model_path}")
+    model_path = _find_model_path(base)
 
     model = joblib.load(model_path)
     version_path = base / VERSION_BASENAME
