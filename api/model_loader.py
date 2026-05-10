@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 import joblib
 
 MODEL_BASENAME = "sample_model.joblib"
+LEGACY_MODEL_BASENAMES = ("regression_model.joblib",)
+MODEL_BASENAMES = (MODEL_BASENAME, *LEGACY_MODEL_BASENAMES)
 VERSION_BASENAME = "model_version.txt"
 
 
@@ -23,14 +25,16 @@ def _is_tarball(path: Path) -> bool:
 
 
 def _find_model_root(search_root: Path) -> Path:
-    direct = search_root / MODEL_BASENAME
-    if direct.is_file():
-        return search_root
-    for p in search_root.rglob(MODEL_BASENAME):
-        if p.is_file():
-            return p.parent
+    for model_basename in MODEL_BASENAMES:
+        direct = search_root / model_basename
+        if direct.is_file():
+            return search_root
+    for model_basename in MODEL_BASENAMES:
+        for p in search_root.rglob(model_basename):
+            if p.is_file():
+                return p.parent
     raise FileNotFoundError(
-        f"{MODEL_BASENAME} not found under {search_root} (after extract or download)"
+        f"none of {MODEL_BASENAMES} found under {search_root} (after extract or download)"
     )
 
 
@@ -77,10 +81,11 @@ def _materialize_uri_to_model_root(uri: str, model_dir: Path) -> Path:
             result = _extract_tarball(local_file, extract_root)
             local_file.unlink(missing_ok=True)
             return result
-        if local_file.name == MODEL_BASENAME:
+        if local_file.name in MODEL_BASENAMES:
             return local_file.parent
         raise FileNotFoundError(
-            f"After S3 download, expected {MODEL_BASENAME} or a tarball, got {local_file.name}"
+            f"After S3 download, expected one of {MODEL_BASENAMES} or a tarball, "
+            f"got {local_file.name}"
         )
 
     raw = uri.replace("file://", "").strip()
@@ -100,14 +105,14 @@ def _materialize_uri_to_model_root(uri: str, model_dir: Path) -> Path:
             shutil.rmtree(extract_root)
         return _extract_tarball(path, extract_root)
 
-    if path.name == MODEL_BASENAME or path.suffix == ".joblib":
+    if path.name in MODEL_BASENAMES or path.suffix == ".joblib":
         return path.parent
 
     raise ValueError(f"Unsupported artifact file type: {path}")
 
 
 def resolve_model_directory() -> Path:
-    """Directory containing sample_model.joblib (after optional fetch/extract)."""
+    """Directory containing a supported model joblib (after optional fetch/extract)."""
     uri = (os.environ.get("MODEL_ARTIFACT_URI") or "").strip()
     base = Path(os.environ.get("MODEL_DIR", "runs/artifacts/latest"))
 
@@ -119,10 +124,14 @@ def resolve_model_directory() -> Path:
 
 def load_model(artifacts_dir: str):
     base = Path(artifacts_dir)
-    model_path = base / MODEL_BASENAME
-
-    if not model_path.is_file():
-        raise FileNotFoundError(f"Model file not found: {model_path}")
+    model_path = next(
+        (base / name for name in MODEL_BASENAMES if (base / name).is_file()),
+        None,
+    )
+    if model_path is None:
+        raise FileNotFoundError(
+            f"Model file not found under {base}; expected one of {MODEL_BASENAMES}"
+        )
 
     model = joblib.load(model_path)
     version_path = base / VERSION_BASENAME
