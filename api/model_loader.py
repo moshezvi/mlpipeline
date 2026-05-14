@@ -77,7 +77,10 @@ def _extract_tarball(archive: Path, dest: Path) -> Path:
         members = tf.getmembers()
         for member in members:
             _validate_tar_member(member, resolved_dest)
-        tf.extractall(resolved_dest, members=members)
+        try:
+            tf.extractall(resolved_dest, members=members, filter="data")
+        except TypeError:
+            tf.extractall(resolved_dest, members=members)
     return _find_model_root(dest)
 
 
