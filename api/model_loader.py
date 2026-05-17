@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import sys
 import tarfile
 from pathlib import Path
 from urllib.parse import urlparse
@@ -34,13 +33,40 @@ def _find_model_root(search_root: Path) -> Path:
     )
 
 
+def _validated_tar_members(tf: tarfile.TarFile, dest: Path) -> list[tuple[tarfile.TarInfo, Path]]:
+    dest_root = dest.resolve()
+    members = []
+
+    for member in tf.getmembers():
+        if member.issym() or member.islnk() or not (member.isfile() or member.isdir()):
+            raise ValueError(f"Unsafe tar member type: {member.name!r}")
+
+        target = (dest / member.name).resolve()
+        try:
+            target.relative_to(dest_root)
+        except ValueError as exc:
+            raise ValueError(f"Unsafe tar member path: {member.name!r}") from exc
+
+        members.append((member, target))
+
+    return members
+
+
 def _extract_tarball(archive: Path, dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:*") as tf:
-        if sys.version_info >= (3, 12):
-            tf.extractall(dest, filter="data")
-        else:
-            tf.extractall(dest)
+        members = _validated_tar_members(tf, dest)
+        for member, target in members:
+            if member.isdir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+
+            source = tf.extractfile(member)
+            if source is None:
+                raise ValueError(f"Could not read tar member: {member.name!r}")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with source, target.open("wb") as output:
+                shutil.copyfileobj(source, output)
     return _find_model_root(dest)
 
 
