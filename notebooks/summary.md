@@ -1,4 +1,4 @@
-# Notebook Summary: `infra-takehome.ipynb`
+# Notebook Summary: `infra-mlpipeline.ipynb`
 
 ## What Data Is Used or Generated
 

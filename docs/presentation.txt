@@ -45,8 +45,8 @@ treated as one combined thing. They have different lifecycles, different runtime
 needs, and different failure modes. So the main architectural split I wanted to
 show was a separate training path and a separate inference path.
 
-Starting with training, I looked at SageMaker because it was one of the tools
-mentioned in the take-home. The training side should be consistent and
+Starting with training, I looked at SageMaker because it fit the project
+brief. The training side should be consistent and
 repeatable, but I also wanted to leave room for retraining. In other words, this
 should not only train when the model code changes. It should also support the
 case where the code stays the same, but new data arrives and we want to retrain
@@ -157,8 +157,9 @@ serving container get checked in the context where they matter.
 
 I also added a lightweight promotion workflow to represent the
 staging-to-production step. It does not perform a real cloud deployment, because
-the actual registry and orchestrator are outside the scope of this take-home. But
-it shows the contract I would want: promote an approved model version and
+the actual registry and orchestrator are outside the scope of this portfolio
+project. It shows the contract I would want: promote an approved model version
+and
 immutable artifact URI from staging to production, record the approval metadata,
 and leave an audit artifact.
 
@@ -204,9 +205,9 @@ project. MLflow is not really runtime monitoring; it is more about recording the
 model artifact, parameters, metrics, and version information so we can understand
 what was trained, reproduce it, and decide whether it should be promoted.
 
-For this project, I used MLflow because it was one of the allowed interfaces in
-the assignment and it is easy to run locally. But that is a tool choice, not a
-hard architectural dependency. In an AWS-centered implementation, the same role
+For this project, I used MLflow because it is easy to run locally and fits the
+tracking requirements for this pipeline. But that is a tool choice, not a hard
+architectural dependency. In an AWS-centered implementation, the same role
 could be filled by SageMaker Experiments or another managed model tracking and
 lineage system.
 

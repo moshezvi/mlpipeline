@@ -18,7 +18,7 @@ on:
         required: true
         default: "production"
       approver:
-        description: "Approver identity (mock/manual input for this take-home)"
+        description: "Approver identity (mock/manual input for this portfolio project)"
         required: true
 
 jobs:
@@ -83,7 +83,7 @@ jobs:
           echo "Would update target runtime config:"
           echo "MODEL_VERSION=$MODEL_VERSION"
           echo "MODEL_ARTIFACT_URI=$MODEL_ARTIFACT_URI"
-          echo "No cloud side effects are performed in this take-home workflow."
+          echo "No cloud side effects are performed in this portfolio workflow."
 
       - name: Upload promotion record
         uses: actions/upload-artifact@v4

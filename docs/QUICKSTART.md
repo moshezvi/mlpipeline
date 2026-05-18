@@ -1,7 +1,7 @@
 # mlpipeline
 Pipeline for training and deploying ML models
 
-## Take-home quickstart
+## Project quickstart
 
 ### 1) Install deps
 ```bash

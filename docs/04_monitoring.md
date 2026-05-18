@@ -68,7 +68,7 @@ Each section below follows **Why** (purpose), **What** (signals / metrics), and 
 
 ## What this repository implements
 
-**Why:** Keep the take-home **runnable and reviewable** without standing up a full observability platform.
+**Why:** Keep the project **runnable and reviewable** without standing up a full observability platform.
 
 **What:**
 

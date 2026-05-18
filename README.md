@@ -1,6 +1,6 @@
 # mlpipeline
 
-Minimal end-to-end ML pipeline take-home project with two clearly separated delivery paths:
+Minimal end-to-end ML pipeline portfolio project with two clearly separated delivery paths:
 
 - **Training path**: reproducible training, versioned artifacts, experiment logging, and a bridge toward continuous retraining.
 - **Inference path**: lightweight Flask serving, model-agnostic deploy image, and runtime model selection.
@@ -122,7 +122,7 @@ The repository is set up for continuous retraining evolution via:
 ### CI alignment
 
 - **Validate (PR/push)**: `inference.yml` runs inference checks, inference unit tests, and an inference CI image build (**test-only, no ECR push**).
-- **Release handoff (`workflow_dispatch`)**: builds/tags `Dockerfile.inference` and emits build metadata; registry push remains placeholder/design-level in this take-home.
+- **Release handoff (`workflow_dispatch`)**: builds/tags `Dockerfile.inference` and emits build metadata; registry push remains placeholder/design-level in this portfolio project.
 - `Dockerfile.local` is intentionally local-only, not part of inference release CI.
 
 ## Containerization model

@@ -1,7 +1,7 @@
-# Take-Home Scoped Plan (3-5 hours)
+# Portfolio Project Scoped Plan (3-5 hours)
 
 ## Objective
-Deliver a minimal, production-oriented workflow for the assignment:
+Deliver a minimal, production-oriented workflow for the project:
 1. model training + versioning,
 2. Flask inference API in Docker,
 3. CI/CD thinking (light implementation),
@@ -9,7 +9,7 @@ Deliver a minimal, production-oriented workflow for the assignment:
 
 ## What to build (and what not to)
 ### In scope
-- One reproducible training script from the provided notebook.
+- One reproducible training script from the source notebook.
 - One model tracking interface (MLflow or SageMaker Experiments interface only).
 - One Flask service with `POST /predict` returning prediction + model version.
 - One Docker image runnable locally.

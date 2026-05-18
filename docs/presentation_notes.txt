@@ -39,7 +39,7 @@ Phase 2: Separate training and inference
   - runtime needs,
   - failure modes.
 - Training side:
-  - looked at SageMaker because it was mentioned in the assignment,
+  - looked at SageMaker because it fit the project brief,
   - wanted consistency, repeatability, and future retraining.
 - CI should validate/package/trigger, not run real heavy training.
 - Real training may need:
@@ -119,7 +119,7 @@ Phase 4: Revisited CI
   - promotes model version plus immutable artifact URI,
   - records approval metadata,
   - uploads audit artifact,
-  - no real cloud deployment in take-home.
+  - no real cloud deployment in this portfolio project.
 - Connects to model-agnostic inference:
   - promotion updates runtime model reference,
   - does not rebuild API image.
@@ -154,7 +154,7 @@ Phase 5: Monitoring and observability
   - prediction drift.
 - Tracking and lineage:
   - MLflow records artifact, params, metrics, version.
-  - MLflow is a tool choice for this take-home.
+  - MLflow is a tool choice for this portfolio project.
   - In AWS, SageMaker Experiments or another managed system could fill that role.
 - Key point:
   - logs tell whether system runs,
