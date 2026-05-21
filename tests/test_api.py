@@ -1,3 +1,4 @@
+import io
 import importlib
 import sys
 import tarfile
@@ -6,6 +7,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.linear_model import LinearRegression
 
 
@@ -65,6 +67,31 @@ def test_load_via_model_artifact_uri_local_dir_and_version_override(tmp_path, mo
     assert health.get_json()["model_version"] == "v-from-env"
 
 
+def test_loads_legacy_regression_model_artifacts(tmp_path, monkeypatch):
+    """Existing deployed artifacts produced before the rename must still boot."""
+    model_dir = tmp_path / "legacy"
+    model_dir.mkdir()
+    x = pd.DataFrame(
+        [[20, 50.0, 1], [40, 80.0, 5]],
+        columns=["age", "income_k", "tenure_years"],
+    )
+    y = np.array([30000.0, 60000.0])
+    model = LinearRegression().fit(x, y)
+    joblib.dump(model, model_dir / "regression_model.joblib")
+    (model_dir / "model_version.txt").write_text("v-legacy", encoding="utf-8")
+    monkeypatch.setenv("MODEL_ARTIFACT_URI", str(model_dir))
+    monkeypatch.setenv("MODEL_DIR", str(tmp_path / "unused_default"))
+    monkeypatch.delenv("MODEL_VERSION", raising=False)
+
+    sys.modules.pop("api.app", None)
+    app_module = importlib.import_module("api.app")
+    client = app_module.app.test_client()
+
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.get_json()["model_version"] == "v-legacy"
+
+
 def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     """Local tarball path containing sample_model.joblib + model_version.txt."""
     inner = tmp_path / "bundle"
@@ -94,6 +121,22 @@ def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     client = app_module.app.test_client()
 
     assert client.get("/health").get_json()["model_version"] == "v-tar"
+
+
+def test_model_artifact_tarball_rejects_path_traversal(tmp_path):
+    from api.model_loader import _materialize_uri_to_model_root
+
+    tar_path = tmp_path / "malicious.tar.gz"
+    with tarfile.open(tar_path, "w:gz") as tf:
+        payload = b"outside extraction root"
+        info = tarfile.TarInfo("../../owned.txt")
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+
+    with pytest.raises(ValueError, match="Unsafe path"):
+        _materialize_uri_to_model_root(str(tar_path), tmp_path / "staging")
+
+    assert not (tmp_path / "owned.txt").exists()
 
 
 def test_predict_valid_and_invalid_payloads(tmp_path, monkeypatch):
