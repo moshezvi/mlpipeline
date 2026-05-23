@@ -1,4 +1,5 @@
 import importlib
+import io
 import sys
 import tarfile
 from pathlib import Path
@@ -6,10 +7,11 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.linear_model import LinearRegression
 
 
-def _prepare_model_artifacts(base_dir: Path):
+def _prepare_model_artifacts(base_dir: Path, model_filename: str = "sample_model.joblib"):
     model_dir = base_dir / "runs" / "artifacts" / "latest"
     model_dir.mkdir(parents=True, exist_ok=True)
 
@@ -20,7 +22,7 @@ def _prepare_model_artifacts(base_dir: Path):
     y = np.array([30000.0, 60000.0, 90000.0])
     model = LinearRegression().fit(x, y)
 
-    joblib.dump(model, model_dir / "sample_model.joblib")
+    joblib.dump(model, model_dir / model_filename)
     (model_dir / "model_version.txt").write_text("vtest", encoding="utf-8")
     return model_dir
 
@@ -65,6 +67,19 @@ def test_load_via_model_artifact_uri_local_dir_and_version_override(tmp_path, mo
     assert health.get_json()["model_version"] == "v-from-env"
 
 
+def test_loads_legacy_regression_model_filename(tmp_path, monkeypatch):
+    model_dir = _prepare_model_artifacts(tmp_path, "regression_model.joblib")
+    monkeypatch.setenv("MODEL_DIR", str(model_dir))
+
+    sys.modules.pop("api.app", None)
+    app_module = importlib.import_module("api.app")
+    client = app_module.app.test_client()
+
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.get_json()["model_version"] == "vtest"
+
+
 def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     """Local tarball path containing sample_model.joblib + model_version.txt."""
     inner = tmp_path / "bundle"
@@ -94,6 +109,24 @@ def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     client = app_module.app.test_client()
 
     assert client.get("/health").get_json()["model_version"] == "v-tar"
+
+
+def test_model_artifact_tarball_rejects_path_traversal(tmp_path, monkeypatch):
+    tar_path = tmp_path / "malicious.tar"
+    payload = b"overwrite"
+    with tarfile.open(tar_path, "w") as tf:
+        member = tarfile.TarInfo("../outside.txt")
+        member.size = len(payload)
+        tf.addfile(member, io.BytesIO(payload))
+
+    monkeypatch.setenv("MODEL_ARTIFACT_URI", str(tar_path))
+    monkeypatch.setenv("MODEL_DIR", str(tmp_path / "staging"))
+
+    from api.model_loader import resolve_model_directory
+
+    with pytest.raises(ValueError, match="Unsafe path"):
+        resolve_model_directory()
+    assert not (tmp_path / "outside.txt").exists()
 
 
 def test_predict_valid_and_invalid_payloads(tmp_path, monkeypatch):
