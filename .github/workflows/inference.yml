@@ -78,15 +78,28 @@ jobs:
           pytest -q tests/test_api.py
 
       - name: Resolve image metadata
+        env:
+          IMAGE_REPOSITORY: ${{ github.event.inputs.image_repository }}
+          IMAGE_TAG_INPUT: ${{ github.event.inputs.image_tag }}
         run: |
-          TAG="${{ github.event.inputs.image_tag }}"
-          if [ -z "$TAG" ]; then
-            SHORT_SHA=$(git rev-parse --short HEAD)
-            TAG="inference-${SHORT_SHA}"
-          fi
-          IMAGE_URI="${{ github.event.inputs.image_repository }}:${TAG}"
-          echo "IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
-          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
+          set -euo pipefail
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          export SHORT_SHA
+          python - <<'PY'
+          import os
+          import re
+          import sys
+
+          repo = os.environ["IMAGE_REPOSITORY"]
+          tag = os.environ["IMAGE_TAG_INPUT"] or f"inference-{os.environ['SHORT_SHA']}"
+          if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:/-]+", repo):
+              sys.exit("image_repository contains unsupported characters")
+          if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}", tag):
+              sys.exit("image_tag contains unsupported characters")
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env_file:
+              env_file.write(f"IMAGE_TAG={tag}\n")
+              env_file.write(f"IMAGE_URI={repo}:{tag}\n")
+          PY
 
       - name: Build model-agnostic inference image
         run: |
@@ -95,16 +108,27 @@ jobs:
             -t "${IMAGE_URI}" .
 
       - name: Emit build metadata artifact
+        env:
+          AWS_REGION_INPUT: ${{ github.event.inputs.aws_region }}
         run: |
-          cat > inference_build_metadata.json <<EOF
-          {
-            "image_uri": "${IMAGE_URI}",
-            "image_tag": "${IMAGE_TAG}",
-            "git_sha": "$(git rev-parse HEAD)",
-            "aws_region": "${{ github.event.inputs.aws_region }}",
-            "note": "Pass MODEL_ARTIFACT_URI (and optional MODEL_VERSION) at deploy/runtime; not used to build this image."
+          set -euo pipefail
+          GIT_SHA=$(git rev-parse HEAD)
+          export GIT_SHA
+          python - <<'PY'
+          import json
+          import os
+
+          payload = {
+              "image_uri": os.environ["IMAGE_URI"],
+              "image_tag": os.environ["IMAGE_TAG"],
+              "git_sha": os.environ["GIT_SHA"],
+              "aws_region": os.environ["AWS_REGION_INPUT"],
+              "note": "Pass MODEL_ARTIFACT_URI (and optional MODEL_VERSION) at deploy/runtime; not used to build this image.",
           }
-          EOF
+          with open("inference_build_metadata.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f, indent=2)
+              f.write("\n")
+          PY
           cat inference_build_metadata.json
 
       - name: Upload build metadata
