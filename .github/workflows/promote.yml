@@ -37,18 +37,30 @@ jobs:
       - name: Validate promotion inputs
         run: |
           set -euo pipefail
-          if [ -z "$MODEL_VERSION" ]; then
-            echo "model_version is required"
-            exit 1
-          fi
-          if [ -z "$MODEL_ARTIFACT_URI" ]; then
-            echo "model_artifact_uri is required"
-            exit 1
-          fi
-          if [ "$SOURCE_STAGE" = "$TARGET_STAGE" ]; then
-            echo "source_stage and target_stage must differ"
-            exit 1
-          fi
+          python - <<'PY'
+          import os
+          import re
+          import sys
+
+          model_version = os.environ["MODEL_VERSION"]
+          artifact_uri = os.environ["MODEL_ARTIFACT_URI"]
+          source_stage = os.environ["SOURCE_STAGE"]
+          target_stage = os.environ["TARGET_STAGE"]
+          if not model_version:
+              sys.exit("model_version is required")
+          if not artifact_uri:
+              sys.exit("model_artifact_uri is required")
+          if source_stage == target_stage:
+              sys.exit("source_stage and target_stage must differ")
+          if not re.fullmatch(r"[A-Za-z0-9._-]+", model_version):
+              sys.exit("model_version contains unsupported characters")
+          if not re.fullmatch(r"[A-Za-z0-9._:/@+-]+", artifact_uri):
+              sys.exit("model_artifact_uri contains unsupported characters")
+          if not re.fullmatch(r"[A-Za-z0-9._-]+", source_stage):
+              sys.exit("source_stage contains unsupported characters")
+          if not re.fullmatch(r"[A-Za-z0-9._-]+", target_stage):
+              sys.exit("target_stage contains unsupported characters")
+          PY
 
       - name: Mock stage gates
         run: |
@@ -64,18 +76,24 @@ jobs:
 
       - name: Emit promotion record
         run: |
-          cat > promotion_record.json <<EOF
-          {
-            "model_version": "$MODEL_VERSION",
-            "model_artifact_uri": "$MODEL_ARTIFACT_URI",
-            "source_stage": "$SOURCE_STAGE",
-            "target_stage": "$TARGET_STAGE",
-            "approved_by": "$APPROVER",
-            "requested_by": "$REQUESTED_BY",
-            "git_sha": "$GIT_SHA",
-            "run_id": "$RUN_ID"
+          python - <<'PY'
+          import json
+          import os
+
+          payload = {
+              "model_version": os.environ["MODEL_VERSION"],
+              "model_artifact_uri": os.environ["MODEL_ARTIFACT_URI"],
+              "source_stage": os.environ["SOURCE_STAGE"],
+              "target_stage": os.environ["TARGET_STAGE"],
+              "approved_by": os.environ["APPROVER"],
+              "requested_by": os.environ["REQUESTED_BY"],
+              "git_sha": os.environ["GIT_SHA"],
+              "run_id": os.environ["RUN_ID"],
           }
-          EOF
+          with open("promotion_record.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f, indent=2)
+              f.write("\n")
+          PY
           cat promotion_record.json
 
       - name: Mock runtime model reference update

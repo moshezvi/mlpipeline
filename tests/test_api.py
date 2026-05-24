@@ -1,4 +1,5 @@
 import importlib
+import io
 import sys
 import tarfile
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.linear_model import LinearRegression
 
 
@@ -94,6 +96,45 @@ def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     client = app_module.app.test_client()
 
     assert client.get("/health").get_json()["model_version"] == "v-tar"
+
+
+def test_model_artifact_tarball_rejects_path_traversal(tmp_path):
+    from api.model_loader import _extract_tarball
+
+    tar_path = tmp_path / "evil-model.tar.gz"
+    payload = b"outside"
+    with tarfile.open(tar_path, "w:gz") as tf:
+        info = tarfile.TarInfo("../outside.txt")
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+
+    with pytest.raises(ValueError, match="Unsafe path"):
+        _extract_tarball(tar_path, tmp_path / "staging")
+
+    assert not (tmp_path / "outside.txt").exists()
+
+
+def test_loads_legacy_regression_model_filename(tmp_path, monkeypatch):
+    model_dir = tmp_path / "legacy"
+    model_dir.mkdir()
+    x = pd.DataFrame(
+        [[20, 50.0, 1], [40, 80.0, 5]],
+        columns=["age", "income_k", "tenure_years"],
+    )
+    y = np.array([30000.0, 60000.0])
+    model = LinearRegression().fit(x, y)
+    joblib.dump(model, model_dir / "regression_model.joblib")
+    (model_dir / "model_version.txt").write_text("v-legacy", encoding="utf-8")
+
+    monkeypatch.setenv("MODEL_DIR", str(model_dir))
+    monkeypatch.delenv("MODEL_ARTIFACT_URI", raising=False)
+    monkeypatch.delenv("MODEL_VERSION", raising=False)
+
+    sys.modules.pop("api.app", None)
+    app_module = importlib.import_module("api.app")
+    client = app_module.app.test_client()
+
+    assert client.get("/health").get_json()["model_version"] == "v-legacy"
 
 
 def test_predict_valid_and_invalid_payloads(tmp_path, monkeypatch):
