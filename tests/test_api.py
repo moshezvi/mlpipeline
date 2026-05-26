@@ -1,4 +1,5 @@
 import importlib
+import io
 import sys
 import tarfile
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.linear_model import LinearRegression
 
 
@@ -94,6 +96,85 @@ def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     client = app_module.app.test_client()
 
     assert client.get("/health").get_json()["model_version"] == "v-tar"
+
+
+def test_load_via_s3_model_artifact_uri_accepts_direct_joblib(tmp_path, monkeypatch):
+    from api import model_loader
+
+    model_path = tmp_path / "model.joblib"
+    x = pd.DataFrame(
+        [[20, 50.0, 1], [40, 80.0, 5]],
+        columns=["age", "income_k", "tenure_years"],
+    )
+    y = np.array([30000.0, 60000.0])
+    joblib.dump(LinearRegression().fit(x, y), model_path)
+
+    monkeypatch.setattr(model_loader, "_download_s3_to_dir", lambda _uri, _dest_dir: model_path)
+    monkeypatch.setenv("MODEL_ARTIFACT_URI", "s3://bucket/path/model.joblib")
+    monkeypatch.setenv("MODEL_VERSION", "v-s3-direct")
+    monkeypatch.setenv("MODEL_DIR", str(tmp_path / "staging"))
+
+    model, version = model_loader.load_model_bundle()
+
+    assert version == "v-s3-direct"
+    assert isinstance(float(model.predict(x.iloc[:1])[0]), float)
+
+
+def test_load_model_accepts_legacy_artifact_basename(tmp_path, monkeypatch):
+    from api import model_loader
+
+    model_dir = tmp_path / "legacy"
+    model_dir.mkdir()
+    x = pd.DataFrame(
+        [[20, 50.0, 1], [40, 80.0, 5]],
+        columns=["age", "income_k", "tenure_years"],
+    )
+    y = np.array([30000.0, 60000.0])
+    joblib.dump(LinearRegression().fit(x, y), model_dir / "regression_model.joblib")
+    (model_dir / "model_version.txt").write_text("v-legacy", encoding="utf-8")
+    monkeypatch.delenv("MODEL_VERSION", raising=False)
+
+    _model, version = model_loader.load_model(str(model_dir))
+
+    assert version == "v-legacy"
+
+
+def test_load_via_model_artifact_uri_tarball_rejects_traversal(tmp_path, monkeypatch):
+    from api import model_loader
+
+    tar_path = tmp_path / "evil.tar.gz"
+    with tarfile.open(tar_path, "w:gz") as tf:
+        data = b"outside"
+        info = tarfile.TarInfo("../../evil.txt")
+        info.size = len(data)
+        tf.addfile(info, io.BytesIO(data))
+
+    monkeypatch.setenv("MODEL_ARTIFACT_URI", str(tar_path))
+    monkeypatch.setenv("MODEL_DIR", str(tmp_path / "staging"))
+    monkeypatch.setenv("MODEL_VERSION", "v-unused")
+
+    with pytest.raises(ValueError, match="Unsafe tar member path"):
+        model_loader.load_model_bundle()
+
+    assert not (tmp_path / "evil.txt").exists()
+
+
+def test_load_via_model_artifact_uri_tarball_rejects_links(tmp_path, monkeypatch):
+    from api import model_loader
+
+    tar_path = tmp_path / "link.tar.gz"
+    with tarfile.open(tar_path, "w:gz") as tf:
+        info = tarfile.TarInfo("sample_model.joblib")
+        info.type = tarfile.SYMTYPE
+        info.linkname = "/tmp/real-model.joblib"
+        tf.addfile(info)
+
+    monkeypatch.setenv("MODEL_ARTIFACT_URI", str(tar_path))
+    monkeypatch.setenv("MODEL_DIR", str(tmp_path / "staging"))
+    monkeypatch.setenv("MODEL_VERSION", "v-unused")
+
+    with pytest.raises(ValueError, match="Unsupported tar member type"):
+        model_loader.load_model_bundle()
 
 
 def test_predict_valid_and_invalid_payloads(tmp_path, monkeypatch):
