@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 import joblib
 
 MODEL_BASENAME = "sample_model.joblib"
+LEGACY_MODEL_BASENAME = "regression_model.joblib"
+MODEL_BASENAMES = (MODEL_BASENAME, LEGACY_MODEL_BASENAME)
 VERSION_BASENAME = "model_version.txt"
 
 
@@ -22,25 +24,49 @@ def _is_tarball(path: Path) -> bool:
     return name.endswith(".tar.gz") or name.endswith(".tgz") or name.endswith(".tar")
 
 
-def _find_model_root(search_root: Path) -> Path:
-    direct = search_root / MODEL_BASENAME
-    if direct.is_file():
-        return search_root
-    for p in search_root.rglob(MODEL_BASENAME):
-        if p.is_file():
-            return p.parent
+def _find_model_path(search_root: Path) -> Path:
+    for basename in MODEL_BASENAMES:
+        direct = search_root / basename
+        if direct.is_file():
+            return direct
+
+    for basename in MODEL_BASENAMES:
+        for p in search_root.rglob(basename):
+            if p.is_file():
+                return p
     raise FileNotFoundError(
-        f"{MODEL_BASENAME} not found under {search_root} (after extract or download)"
+        f"Model file {MODEL_BASENAMES} not found under {search_root} (after extract or download)"
     )
+
+
+def _find_model_root(search_root: Path) -> Path:
+    return _find_model_path(search_root).parent
+
+
+def _validate_tar_member(member: tarfile.TarInfo, dest: Path) -> None:
+    member_path = Path(member.name)
+    if member_path.is_absolute():
+        raise ValueError(f"Unsafe tar member path: {member.name!r}")
+
+    dest_root = dest.resolve()
+    target = (dest / member.name).resolve()
+    if not target.is_relative_to(dest_root):
+        raise ValueError(f"Unsafe tar member path: {member.name!r}")
+
+    if not (member.isdir() or member.isreg()):
+        raise ValueError(f"Unsupported tar member type: {member.name!r}")
 
 
 def _extract_tarball(archive: Path, dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:*") as tf:
+        members = tf.getmembers()
+        for member in members:
+            _validate_tar_member(member, dest)
         if sys.version_info >= (3, 12):
-            tf.extractall(dest, filter="data")
+            tf.extractall(dest, members=members, filter="data")
         else:
-            tf.extractall(dest)
+            tf.extractall(dest, members=members)
     return _find_model_root(dest)
 
 
@@ -77,10 +103,10 @@ def _materialize_uri_to_model_root(uri: str, model_dir: Path) -> Path:
             result = _extract_tarball(local_file, extract_root)
             local_file.unlink(missing_ok=True)
             return result
-        if local_file.name == MODEL_BASENAME:
-            return local_file.parent
+        if local_file.suffix == ".joblib":
+            return local_file
         raise FileNotFoundError(
-            f"After S3 download, expected {MODEL_BASENAME} or a tarball, got {local_file.name}"
+            f"After S3 download, expected a .joblib model file or a tarball, got {local_file.name}"
         )
 
     raw = uri.replace("file://", "").strip()
@@ -107,7 +133,7 @@ def _materialize_uri_to_model_root(uri: str, model_dir: Path) -> Path:
 
 
 def resolve_model_directory() -> Path:
-    """Directory containing sample_model.joblib (after optional fetch/extract)."""
+    """Directory or explicit .joblib path for the resolved model artifact."""
     uri = (os.environ.get("MODEL_ARTIFACT_URI") or "").strip()
     base = Path(os.environ.get("MODEL_DIR", "runs/artifacts/latest"))
 
@@ -119,13 +145,16 @@ def resolve_model_directory() -> Path:
 
 def load_model(artifacts_dir: str):
     base = Path(artifacts_dir)
-    model_path = base / MODEL_BASENAME
+    if base.is_file():
+        model_path = base
+    else:
+        model_path = _find_model_path(base)
 
     if not model_path.is_file():
         raise FileNotFoundError(f"Model file not found: {model_path}")
 
     model = joblib.load(model_path)
-    version_path = base / VERSION_BASENAME
+    version_path = model_path.parent / VERSION_BASENAME
 
     override = (os.environ.get("MODEL_VERSION") or "").strip()
     if override:
