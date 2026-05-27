@@ -1,4 +1,5 @@
 import importlib
+import io
 import sys
 import tarfile
 from pathlib import Path
@@ -6,7 +7,10 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.linear_model import LinearRegression
+
+from api import model_loader
 
 
 def _prepare_model_artifacts(base_dir: Path):
@@ -94,6 +98,39 @@ def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     client = app_module.app.test_client()
 
     assert client.get("/health").get_json()["model_version"] == "v-tar"
+
+
+def test_load_model_accepts_legacy_artifact_filename(tmp_path, monkeypatch):
+    model_dir = tmp_path / "legacy"
+    model_dir.mkdir()
+    x = pd.DataFrame(
+        [[20, 50.0, 1], [40, 80.0, 5]],
+        columns=["age", "income_k", "tenure_years"],
+    )
+    y = np.array([30000.0, 60000.0])
+    model = LinearRegression().fit(x, y)
+    joblib.dump(model, model_dir / "regression_model.joblib")
+    (model_dir / "model_version.txt").write_text("v-legacy", encoding="utf-8")
+    monkeypatch.delenv("MODEL_VERSION", raising=False)
+
+    _model, model_version = model_loader.load_model(str(model_dir))
+
+    assert model_version == "v-legacy"
+
+
+def test_tarball_rejects_path_traversal_member(tmp_path):
+    tar_path = tmp_path / "malicious.tar.gz"
+    payload = b"overwrite"
+    with tarfile.open(tar_path, "w:gz") as tf:
+        member = tarfile.TarInfo("../outside.txt")
+        member.size = len(payload)
+        tf.addfile(member, io.BytesIO(payload))
+
+    extract_dir = tmp_path / "extract"
+    with pytest.raises(ValueError, match="Unsafe tar member path rejected"):
+        model_loader._extract_tarball(tar_path, extract_dir)
+
+    assert not (tmp_path / "outside.txt").exists()
 
 
 def test_predict_valid_and_invalid_payloads(tmp_path, monkeypatch):
