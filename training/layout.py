@@ -64,8 +64,8 @@ def emit_manifest(
 ) -> dict[str, str | bool | float]:
     manifest = {
         "model_version": model_version,
-        "model_path": str(paths["latest_model_path"]),
-        "metrics_path": str(paths["latest_metrics_path"]),
+        "model_path": str(paths["run_model_path"]),
+        "metrics_path": str(paths["run_metrics_path"]),
         "passed_quality_evaluation": bool(metrics_payload["passed_quality_evaluation"]),
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
     }

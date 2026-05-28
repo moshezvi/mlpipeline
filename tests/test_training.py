@@ -54,6 +54,11 @@ def test_training_writes_metrics_contract(tmp_path, monkeypatch):
     }
     assert required_keys.issubset(metrics.keys())
 
+    manifest_path = Path("runs/artifacts/latest/manifest.json")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert manifest["model_path"] == "runs/artifacts/runs/v001/sample_model.joblib"
+    assert manifest["metrics_path"] == "runs/artifacts/runs/v001/metrics.json"
+
 
 def test_training_increments_model_version(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
