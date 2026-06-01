@@ -78,3 +78,28 @@ def test_training_increments_model_version(tmp_path, monkeypatch):
 
     assert first == "v001"
     assert second == "v002"
+
+
+def test_manifest_points_to_immutable_run_artifacts(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _stub_mlflow(monkeypatch)
+    args = argparse.Namespace(
+        samples=20,
+        random_seed=42,
+        output_dir="runs/artifacts",
+        experiment_name="test-exp",
+    )
+    df = train_module.load_training_data(
+        data_uri=None,
+        samples=args.samples,
+        random_seed=args.random_seed,
+    )
+
+    train_module.train_and_log(args, df)
+
+    manifest = json.loads(
+        Path("runs/artifacts/latest/manifest.json").read_text(encoding="utf-8")
+    )
+
+    assert manifest["model_path"] == "runs/artifacts/runs/v001/sample_model.joblib"
+    assert manifest["metrics_path"] == "runs/artifacts/runs/v001/metrics.json"
