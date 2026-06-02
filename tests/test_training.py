@@ -2,6 +2,9 @@ import argparse
 import json
 from pathlib import Path
 
+import pandas as pd
+import pytest
+
 import training.train as train_module
 import training.tracking as tracking_module
 
@@ -53,6 +56,37 @@ def test_training_writes_metrics_contract(tmp_path, monkeypatch):
         "training_time_seconds",
     }
     assert required_keys.issubset(metrics.keys())
+
+    manifest = json.loads(Path("runs/artifacts/latest/manifest.json").read_text(encoding="utf-8"))
+    assert manifest["model_path"] == "runs/artifacts/runs/v001/sample_model.joblib"
+    assert manifest["metrics_path"] == "runs/artifacts/runs/v001/metrics.json"
+    assert Path(manifest["model_path"]).exists()
+    assert Path(manifest["metrics_path"]).exists()
+
+
+def test_training_refuses_to_publish_failed_quality_model(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _stub_mlflow(monkeypatch)
+    args = argparse.Namespace(
+        samples=4,
+        random_seed=42,
+        output_dir="runs/artifacts",
+        experiment_name="test-exp",
+    )
+    df = pd.DataFrame(
+        {
+            "age": [25, 35, 45, 55],
+            "income_k": [60.0, 60.0, 60.0, 60.0],
+            "tenure_years": [1, 1, 1, 1],
+            "target": [100.0, 100.0, 100.0, 100.0],
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="failed quality evaluation"):
+        train_module.train_and_log(args, df)
+
+    assert not Path("runs/artifacts/latest/sample_model.joblib").exists()
+    assert not Path("runs/artifacts/latest/manifest.json").exists()
 
 
 def test_training_increments_model_version(tmp_path, monkeypatch):
