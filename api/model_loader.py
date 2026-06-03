@@ -34,9 +34,23 @@ def _find_model_root(search_root: Path) -> Path:
     )
 
 
+def _validate_tar_members(tf: tarfile.TarFile, dest: Path) -> None:
+    dest_root = dest.resolve()
+    for member in tf.getmembers():
+        if not (member.isfile() or member.isdir()):
+            raise ValueError(
+                f"Unsafe tar member type for {member.name!r}: only files and directories are allowed"
+            )
+
+        target = (dest / member.name).resolve()
+        if target != dest_root and not target.is_relative_to(dest_root):
+            raise ValueError(f"Unsafe tar member path outside destination: {member.name!r}")
+
+
 def _extract_tarball(archive: Path, dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:*") as tf:
+        _validate_tar_members(tf, dest)
         if sys.version_info >= (3, 12):
             tf.extractall(dest, filter="data")
         else:

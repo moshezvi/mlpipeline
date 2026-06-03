@@ -1,4 +1,5 @@
 import importlib
+import io
 import sys
 import tarfile
 from pathlib import Path
@@ -6,7 +7,10 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.linear_model import LinearRegression
+
+from api import model_loader
 
 
 def _prepare_model_artifacts(base_dir: Path):
@@ -94,6 +98,40 @@ def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     client = app_module.app.test_client()
 
     assert client.get("/health").get_json()["model_version"] == "v-tar"
+
+
+def test_model_artifact_tarball_rejects_path_traversal(tmp_path):
+    archive = tmp_path / "evil.tar"
+    escaped = tmp_path / "escaped.txt"
+
+    with tarfile.open(archive, "w") as tf:
+        model_member = tarfile.TarInfo("sample_model.joblib")
+        model_payload = b"not-a-real-model-for-extraction-test"
+        model_member.size = len(model_payload)
+        tf.addfile(model_member, io.BytesIO(model_payload))
+
+        traversal_member = tarfile.TarInfo("../escaped.txt")
+        traversal_payload = b"escaped write"
+        traversal_member.size = len(traversal_payload)
+        tf.addfile(traversal_member, io.BytesIO(traversal_payload))
+
+    with pytest.raises(ValueError, match="outside destination"):
+        model_loader._extract_tarball(archive, tmp_path / "dest")
+
+    assert not escaped.exists()
+
+
+def test_model_artifact_tarball_rejects_links(tmp_path):
+    archive = tmp_path / "evil-link.tar"
+
+    with tarfile.open(archive, "w") as tf:
+        link_member = tarfile.TarInfo("sample_model.joblib")
+        link_member.type = tarfile.SYMTYPE
+        link_member.linkname = "/etc/passwd"
+        tf.addfile(link_member)
+
+    with pytest.raises(ValueError, match="only files and directories"):
+        model_loader._extract_tarball(archive, tmp_path / "dest")
 
 
 def test_predict_valid_and_invalid_payloads(tmp_path, monkeypatch):
