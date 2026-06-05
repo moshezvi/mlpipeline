@@ -60,6 +60,10 @@ jobs:
   build-inference-image:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      IMAGE_REPOSITORY: ${{ github.event.inputs.image_repository }}
+      IMAGE_TAG_INPUT: ${{ github.event.inputs.image_tag }}
+      AWS_REGION: ${{ github.event.inputs.aws_region }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,12 +83,38 @@ jobs:
 
       - name: Resolve image metadata
         run: |
-          TAG="${{ github.event.inputs.image_tag }}"
+          set -euo pipefail
+          reject_control_chars() {
+            case "$2" in
+              *$'\n'*|*$'\r'*)
+                echo "$1 must not contain newlines"
+                exit 1
+                ;;
+            esac
+          }
+
+          reject_control_chars "image_repository" "$IMAGE_REPOSITORY"
+          reject_control_chars "image_tag" "$IMAGE_TAG_INPUT"
+          reject_control_chars "aws_region" "$AWS_REGION"
+
+          TAG="$IMAGE_TAG_INPUT"
           if [ -z "$TAG" ]; then
             SHORT_SHA=$(git rev-parse --short HEAD)
             TAG="inference-${SHORT_SHA}"
           fi
-          IMAGE_URI="${{ github.event.inputs.image_repository }}:${TAG}"
+          if [[ ! "$TAG" =~ ^[A-Za-z0-9_.-]{1,128}$ ]]; then
+            echo "image_tag must be a valid Docker tag"
+            exit 1
+          fi
+          if [[ ! "$IMAGE_REPOSITORY" =~ ^[A-Za-z0-9./:_-]+$ ]]; then
+            echo "image_repository contains unsupported characters"
+            exit 1
+          fi
+          if [[ ! "$AWS_REGION" =~ ^[a-z]{2}(-gov)?-[a-z]+-[0-9]$ ]]; then
+            echo "aws_region must look like a valid AWS region"
+            exit 1
+          fi
+          IMAGE_URI="${IMAGE_REPOSITORY}:${TAG}"
           echo "IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
           echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
 
@@ -96,16 +126,29 @@ jobs:
 
       - name: Emit build metadata artifact
         run: |
-          cat > inference_build_metadata.json <<EOF
-          {
-            "image_uri": "${IMAGE_URI}",
-            "image_tag": "${IMAGE_TAG}",
-            "git_sha": "$(git rev-parse HEAD)",
-            "aws_region": "${{ github.event.inputs.aws_region }}",
-            "note": "Pass MODEL_ARTIFACT_URI (and optional MODEL_VERSION) at deploy/runtime; not used to build this image."
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          payload = {
+              "image_uri": os.environ["IMAGE_URI"],
+              "image_tag": os.environ["IMAGE_TAG"],
+              "git_sha": subprocess.check_output(
+                  ["git", "rev-parse", "HEAD"], text=True
+              ).strip(),
+              "aws_region": os.environ["AWS_REGION"],
+              "note": (
+                  "Pass MODEL_ARTIFACT_URI (and optional MODEL_VERSION) at "
+                  "deploy/runtime; not used to build this image."
+              ),
           }
-          EOF
-          cat inference_build_metadata.json
+          with open("inference_build_metadata.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f, indent=2)
+              f.write("\n")
+          PY
+          python -m json.tool inference_build_metadata.json
 
       - name: Upload build metadata
         uses: actions/upload-artifact@v4

@@ -67,6 +67,14 @@ def train_and_log(args: argparse.Namespace, df: pd.DataFrame) -> None:
     if git_commit:
         metrics_payload["git_commit"] = git_commit
 
+    if not metrics_payload["passed_quality_evaluation"]:
+        logger.error(
+            "Quality evaluation failed (RMSE %.4f vs baseline %.4f); refusing to publish release artifacts.",
+            metrics_payload["rmse"],
+            metrics_payload["baseline_rmse"],
+        )
+        raise RuntimeError("Model failed quality evaluation; release artifacts were not published")
+
     save_artifacts(model, metrics_payload, model_version, paths)
     manifest = emit_manifest(model_version, metrics_payload, paths)
 
