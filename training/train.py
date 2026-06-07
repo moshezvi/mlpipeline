@@ -67,17 +67,37 @@ def train_and_log(args: argparse.Namespace, df: pd.DataFrame) -> None:
     if git_commit:
         metrics_payload["git_commit"] = git_commit
 
-    save_artifacts(model, metrics_payload, model_version, paths)
-    manifest = emit_manifest(model_version, metrics_payload, paths)
+    publish_latest = bool(metrics_payload["passed_quality_evaluation"])
+    save_artifacts(
+        model, metrics_payload, model_version, paths, publish_latest=publish_latest
+    )
+    manifest = emit_manifest(
+        model_version, metrics_payload, paths, publish_latest=publish_latest
+    )
 
-    log_to_mlflow(args, model_version, metrics_payload, paths, git_commit)
+    log_to_mlflow(
+        args,
+        model_version,
+        metrics_payload,
+        paths,
+        git_commit,
+        publish_latest=publish_latest,
+    )
 
     logger.info("Saved run artifacts to: %s", paths["run_dir"])
-    logger.info("Updated latest artifacts in: %s", paths["latest_dir"])
-    logger.info("Emitted manifest at: %s", paths["latest_manifest_path"])
+    if publish_latest:
+        logger.info("Updated latest artifacts in: %s", paths["latest_dir"])
+        logger.info("Emitted manifest at: %s", paths["latest_manifest_path"])
+    else:
+        logger.error("Model failed quality evaluation; latest artifacts were not updated")
     logger.info("Manifest quality evaluation: %s", manifest["passed_quality_evaluation"])
     logger.info("Model version: %s", model_version)
     logger.info("Training log file: %s", log_path)
+
+    if not publish_latest:
+        raise RuntimeError(
+            "Model failed quality evaluation; run artifacts were saved but latest was not updated"
+        )
 
 
 def parse_args() -> argparse.Namespace:
