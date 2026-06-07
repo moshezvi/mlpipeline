@@ -68,6 +68,13 @@ jobs:
   submit-training:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      TRAIN_BACKEND: ${{ github.event.inputs.train_backend }}
+      DATA_URI: ${{ github.event.inputs.data_uri }}
+      OUTPUT_DIR: ${{ github.event.inputs.output_dir }}
+      EXPERIMENT_NAME: ${{ github.event.inputs.experiment_name }}
+      SAMPLES: ${{ github.event.inputs.samples }}
+      RANDOM_SEED: ${{ github.event.inputs.random_seed }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,8 +92,8 @@ jobs:
 
       - name: Select training backend
         run: |
-          echo "Selected backend: ${{ github.event.inputs.train_backend }}"
-          if [ "${{ github.event.inputs.train_backend }}" != "local" ] && [ "${{ github.event.inputs.train_backend }}" != "aws" ]; then
+          echo "Selected backend: $TRAIN_BACKEND"
+          if [ "$TRAIN_BACKEND" != "local" ] && [ "$TRAIN_BACKEND" != "aws" ]; then
             echo "Unsupported backend. Use 'local' or 'aws'."
             exit 1
           fi
@@ -95,19 +102,35 @@ jobs:
         if: ${{ github.event.inputs.train_backend == 'local' }}
         run: |
           python training/train.py \
-            --data-uri "${{ github.event.inputs.data_uri }}" \
-            --samples "${{ github.event.inputs.samples }}" \
-            --random-seed "${{ github.event.inputs.random_seed }}" \
-            --output-dir "${{ github.event.inputs.output_dir }}" \
-            --experiment-name "${{ github.event.inputs.experiment_name }}"
+            --data-uri "$DATA_URI" \
+            --samples "$SAMPLES" \
+            --random-seed "$RANDOM_SEED" \
+            --output-dir "$OUTPUT_DIR" \
+            --experiment-name "$EXPERIMENT_NAME"
           MODEL_VERSION=$(python - <<'PY'
+          import os
           import json
-          with open("${{ github.event.inputs.output_dir }}/latest/manifest.json", "r", encoding="utf-8") as f:
-              print(json.load(f)["model_version"])
+          from pathlib import Path
+
+          manifest_path = Path(os.environ["OUTPUT_DIR"]) / "latest" / "manifest.json"
+          with manifest_path.open("r", encoding="utf-8") as f:
+              manifest = json.load(f)
+          print(manifest["model_version"])
+          PY
+          )
+          MODEL_ARTIFACT_URI=$(python - <<'PY'
+          import os
+          import json
+          from pathlib import Path
+
+          manifest_path = Path(os.environ["OUTPUT_DIR"]) / "latest" / "manifest.json"
+          with manifest_path.open("r", encoding="utf-8") as f:
+              manifest = json.load(f)
+          print(manifest["model_path"])
           PY
           )
           echo "TRAIN_EXECUTION_ARN=local-run-${MODEL_VERSION}" >> "$GITHUB_ENV"
-          echo "MODEL_ARTIFACT_URI=${{ github.event.inputs.output_dir }}/latest/sample_model.joblib" >> "$GITHUB_ENV"
+          echo "MODEL_ARTIFACT_URI=${MODEL_ARTIFACT_URI}" >> "$GITHUB_ENV"
           echo "TRAIN_STATUS=completed-local" >> "$GITHUB_ENV"
 
       - name: Submit training run (AWS placeholder)
@@ -123,20 +146,26 @@ jobs:
 
       - name: Persist training submission metadata
         run: |
-          cat > training_submission.json <<EOF
-          {
-            "train_backend": "${{ github.event.inputs.train_backend }}",
-            "train_execution_arn": "${TRAIN_EXECUTION_ARN}",
-            "model_artifact_uri": "${MODEL_ARTIFACT_URI}",
-            "status": "${TRAIN_STATUS}",
-            "data_uri": "${{ github.event.inputs.data_uri }}",
-            "output_dir": "${{ github.event.inputs.output_dir }}",
-            "experiment_name": "${{ github.event.inputs.experiment_name }}",
-            "samples": "${{ github.event.inputs.samples }}",
-            "random_seed": "${{ github.event.inputs.random_seed }}"
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          payload = {
+              "train_backend": os.environ["TRAIN_BACKEND"],
+              "train_execution_arn": os.environ["TRAIN_EXECUTION_ARN"],
+              "model_artifact_uri": os.environ["MODEL_ARTIFACT_URI"],
+              "status": os.environ["TRAIN_STATUS"],
+              "data_uri": os.environ["DATA_URI"],
+              "output_dir": os.environ["OUTPUT_DIR"],
+              "experiment_name": os.environ["EXPERIMENT_NAME"],
+              "samples": os.environ["SAMPLES"],
+              "random_seed": os.environ["RANDOM_SEED"],
           }
-          EOF
-          cat training_submission.json
+          output = Path("training_submission.json")
+          output.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+          print(output.read_text(encoding="utf-8"))
+          PY
 
       - name: Upload training submission artifact
         uses: actions/upload-artifact@v4

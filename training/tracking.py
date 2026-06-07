@@ -20,6 +20,7 @@ def log_to_mlflow(
     metrics_payload: dict[str, float | bool | str],
     paths: dict[str, Path],
     git_commit: str | None,
+    publish_latest: bool = True,
 ) -> None:
     mlflow.set_tracking_uri("file:./runs/mlruns")
     mlflow.set_experiment(args.experiment_name)
@@ -33,6 +34,7 @@ def log_to_mlflow(
         mlflow.log_artifact(str(paths["run_model_path"]))
         mlflow.log_artifact(str(paths["run_metrics_path"]))
         mlflow.log_artifact(str(paths["run_version_path"]))
-        mlflow.log_artifact(str(paths["latest_model_path"]))
-        mlflow.log_artifact(str(paths["latest_metrics_path"]))
-        mlflow.log_artifact(str(paths["latest_version_path"]))
+        if publish_latest:
+            mlflow.log_artifact(str(paths["latest_model_path"]))
+            mlflow.log_artifact(str(paths["latest_metrics_path"]))
+            mlflow.log_artifact(str(paths["latest_version_path"]))
