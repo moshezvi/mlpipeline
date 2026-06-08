@@ -64,19 +64,25 @@ jobs:
 
       - name: Emit promotion record
         run: |
-          cat > promotion_record.json <<EOF
-          {
-            "model_version": "$MODEL_VERSION",
-            "model_artifact_uri": "$MODEL_ARTIFACT_URI",
-            "source_stage": "$SOURCE_STAGE",
-            "target_stage": "$TARGET_STAGE",
-            "approved_by": "$APPROVER",
-            "requested_by": "$REQUESTED_BY",
-            "git_sha": "$GIT_SHA",
-            "run_id": "$RUN_ID"
+          python - <<'PY'
+          import json
+          import os
+
+          payload = {
+              "model_version": os.environ["MODEL_VERSION"],
+              "model_artifact_uri": os.environ["MODEL_ARTIFACT_URI"],
+              "source_stage": os.environ["SOURCE_STAGE"],
+              "target_stage": os.environ["TARGET_STAGE"],
+              "approved_by": os.environ["APPROVER"],
+              "requested_by": os.environ["REQUESTED_BY"],
+              "git_sha": os.environ["GIT_SHA"],
+              "run_id": os.environ["RUN_ID"],
           }
-          EOF
-          cat promotion_record.json
+          with open("promotion_record.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f, indent=2)
+              f.write("\n")
+          print(json.dumps(payload, indent=2))
+          PY
 
       - name: Mock runtime model reference update
         run: |

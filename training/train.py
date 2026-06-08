@@ -67,14 +67,19 @@ def train_and_log(args: argparse.Namespace, df: pd.DataFrame) -> None:
     if git_commit:
         metrics_payload["git_commit"] = git_commit
 
+    passed_quality_evaluation = bool(metrics_payload["passed_quality_evaluation"])
     save_artifacts(model, metrics_payload, model_version, paths)
     manifest = emit_manifest(model_version, metrics_payload, paths)
 
     log_to_mlflow(args, model_version, metrics_payload, paths, git_commit)
 
     logger.info("Saved run artifacts to: %s", paths["run_dir"])
-    logger.info("Updated latest artifacts in: %s", paths["latest_dir"])
-    logger.info("Emitted manifest at: %s", paths["latest_manifest_path"])
+    logger.info("Emitted run manifest at: %s", paths["run_manifest_path"])
+    if passed_quality_evaluation:
+        logger.info("Updated latest artifacts in: %s", paths["latest_dir"])
+        logger.info("Emitted latest manifest at: %s", paths["latest_manifest_path"])
+    else:
+        logger.warning("Quality evaluation failed; latest artifacts were not updated")
     logger.info("Manifest quality evaluation: %s", manifest["passed_quality_evaluation"])
     logger.info("Model version: %s", model_version)
     logger.info("Training log file: %s", log_path)

@@ -33,6 +33,7 @@ def log_to_mlflow(
         mlflow.log_artifact(str(paths["run_model_path"]))
         mlflow.log_artifact(str(paths["run_metrics_path"]))
         mlflow.log_artifact(str(paths["run_version_path"]))
-        mlflow.log_artifact(str(paths["latest_model_path"]))
-        mlflow.log_artifact(str(paths["latest_metrics_path"]))
-        mlflow.log_artifact(str(paths["latest_version_path"]))
+        if bool(metrics_payload["passed_quality_evaluation"]):
+            mlflow.log_artifact(str(paths["latest_model_path"]))
+            mlflow.log_artifact(str(paths["latest_metrics_path"]))
+            mlflow.log_artifact(str(paths["latest_version_path"]))
