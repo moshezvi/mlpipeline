@@ -12,6 +12,8 @@ from urllib.parse import urlparse
 import joblib
 
 MODEL_BASENAME = "sample_model.joblib"
+LEGACY_MODEL_BASENAME = "regression_model.joblib"
+MODEL_BASENAMES = (MODEL_BASENAME, LEGACY_MODEL_BASENAME)
 VERSION_BASENAME = "model_version.txt"
 
 
@@ -23,20 +25,39 @@ def _is_tarball(path: Path) -> bool:
 
 
 def _find_model_root(search_root: Path) -> Path:
-    direct = search_root / MODEL_BASENAME
-    if direct.is_file():
-        return search_root
-    for p in search_root.rglob(MODEL_BASENAME):
-        if p.is_file():
-            return p.parent
+    for basename in MODEL_BASENAMES:
+        direct = search_root / basename
+        if direct.is_file():
+            return search_root
+    for basename in MODEL_BASENAMES:
+        for p in search_root.rglob(basename):
+            if p.is_file():
+                return p.parent
     raise FileNotFoundError(
-        f"{MODEL_BASENAME} not found under {search_root} (after extract or download)"
+        f"None of {MODEL_BASENAMES} found under {search_root} (after extract or download)"
     )
+
+
+def _validate_tar_members(tf: tarfile.TarFile, dest: Path) -> None:
+    dest_root = dest.resolve()
+    for member in tf.getmembers():
+        member_target = (dest / member.name).resolve()
+        if member_target != dest_root and dest_root not in member_target.parents:
+            raise ValueError(
+                f"Unsafe tar member {member.name!r}: extraction target escapes {dest}"
+            )
+        if member.issym() or member.islnk():
+            raise ValueError(f"Unsafe tar member {member.name!r}: links are not allowed")
+        if not (member.isdir() or member.isfile()):
+            raise ValueError(
+                f"Unsafe tar member {member.name!r}: only regular files and directories are allowed"
+            )
 
 
 def _extract_tarball(archive: Path, dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:*") as tf:
+        _validate_tar_members(tf, dest)
         if sys.version_info >= (3, 12):
             tf.extractall(dest, filter="data")
         else:
@@ -77,10 +98,11 @@ def _materialize_uri_to_model_root(uri: str, model_dir: Path) -> Path:
             result = _extract_tarball(local_file, extract_root)
             local_file.unlink(missing_ok=True)
             return result
-        if local_file.name == MODEL_BASENAME:
+        if local_file.name in MODEL_BASENAMES:
             return local_file.parent
         raise FileNotFoundError(
-            f"After S3 download, expected {MODEL_BASENAME} or a tarball, got {local_file.name}"
+            f"After S3 download, expected one of {MODEL_BASENAMES} or a tarball, "
+            f"got {local_file.name}"
         )
 
     raw = uri.replace("file://", "").strip()
@@ -100,7 +122,7 @@ def _materialize_uri_to_model_root(uri: str, model_dir: Path) -> Path:
             shutil.rmtree(extract_root)
         return _extract_tarball(path, extract_root)
 
-    if path.name == MODEL_BASENAME or path.suffix == ".joblib":
+    if path.name in MODEL_BASENAMES or path.suffix == ".joblib":
         return path.parent
 
     raise ValueError(f"Unsupported artifact file type: {path}")
@@ -119,10 +141,15 @@ def resolve_model_directory() -> Path:
 
 def load_model(artifacts_dir: str):
     base = Path(artifacts_dir)
-    model_path = base / MODEL_BASENAME
+    model_path = next(
+        (base / name for name in MODEL_BASENAMES if (base / name).is_file()),
+        None,
+    )
 
-    if not model_path.is_file():
-        raise FileNotFoundError(f"Model file not found: {model_path}")
+    if model_path is None:
+        raise FileNotFoundError(
+            f"Model file not found under {base}; expected one of {MODEL_BASENAMES}"
+        )
 
     model = joblib.load(model_path)
     version_path = base / VERSION_BASENAME
