@@ -55,6 +55,9 @@ def train_and_log(args: argparse.Namespace, df: pd.DataFrame) -> None:
         computed_metrics["baseline_rmse"],
         computed_metrics["passed_quality_evaluation"],
     )
+    if not computed_metrics["passed_quality_evaluation"]:
+        logger.error("Model failed quality evaluation; refusing to publish artifacts")
+        raise ValueError("model failed quality evaluation; refusing to publish artifacts")
 
     git_commit = get_git_commit()
     metrics_payload = {
