@@ -57,6 +57,14 @@ def test_training_writes_metrics_contract(tmp_path, monkeypatch):
     }
     assert required_keys.issubset(metrics.keys())
 
+    manifest = json.loads(Path("runs/artifacts/latest/manifest.json").read_text(encoding="utf-8"))
+    normalized_model_path = manifest["model_path"].replace("\\", "/")
+    normalized_metrics_path = manifest["metrics_path"].replace("\\", "/")
+    assert "/runs/v001/sample_model.joblib" in normalized_model_path
+    assert "/runs/v001/metrics.json" in normalized_metrics_path
+    assert "/latest/" not in normalized_model_path
+    assert "/latest/" not in normalized_metrics_path
+
 
 def test_training_increments_model_version(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
