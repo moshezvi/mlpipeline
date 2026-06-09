@@ -7,6 +7,7 @@ import shutil
 import sys
 import tarfile
 from pathlib import Path
+from posixpath import normpath
 from urllib.parse import urlparse
 
 import joblib
@@ -37,11 +38,34 @@ def _find_model_root(search_root: Path) -> Path:
 def _extract_tarball(archive: Path, dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:*") as tf:
+        members = tf.getmembers()
+        _validate_tar_members(members, dest)
         if sys.version_info >= (3, 12):
-            tf.extractall(dest, filter="data")
+            tf.extractall(dest, members=members, filter="data")
         else:
-            tf.extractall(dest)
+            tf.extractall(dest, members=members)
     return _find_model_root(dest)
+
+
+def _validate_tar_members(members: list[tarfile.TarInfo], dest: Path) -> None:
+    """Reject archive entries that could write outside dest or create links/devices."""
+    dest_root = dest.resolve()
+    for member in members:
+        normalized_name = normpath(member.name)
+        if (
+            not member.name
+            or normalized_name in ("", ".")
+            or normalized_name.startswith("../")
+            or os.path.isabs(member.name)
+        ):
+            raise ValueError(f"Unsafe tar member path: {member.name!r}")
+
+        target = (dest / normalized_name).resolve()
+        if os.path.commonpath([str(dest_root), str(target)]) != str(dest_root):
+            raise ValueError(f"Tar member escapes extraction directory: {member.name!r}")
+
+        if not (member.isfile() or member.isdir()):
+            raise ValueError(f"Unsupported tar member type: {member.name!r}")
 
 
 def _download_s3_to_dir(uri: str, dest_dir: Path) -> Path:

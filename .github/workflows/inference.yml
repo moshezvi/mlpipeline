@@ -78,13 +78,17 @@ jobs:
           pytest -q tests/test_api.py
 
       - name: Resolve image metadata
+        env:
+          IMAGE_TAG_INPUT: ${{ github.event.inputs.image_tag }}
+          IMAGE_REPOSITORY: ${{ github.event.inputs.image_repository }}
         run: |
-          TAG="${{ github.event.inputs.image_tag }}"
+          set -euo pipefail
+          TAG="$IMAGE_TAG_INPUT"
           if [ -z "$TAG" ]; then
             SHORT_SHA=$(git rev-parse --short HEAD)
             TAG="inference-${SHORT_SHA}"
           fi
-          IMAGE_URI="${{ github.event.inputs.image_repository }}:${TAG}"
+          IMAGE_URI="${IMAGE_REPOSITORY}:${TAG}"
           echo "IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
           echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
 
@@ -95,16 +99,26 @@ jobs:
             -t "${IMAGE_URI}" .
 
       - name: Emit build metadata artifact
+        env:
+          AWS_REGION_INPUT: ${{ github.event.inputs.aws_region }}
         run: |
-          cat > inference_build_metadata.json <<EOF
-          {
-            "image_uri": "${IMAGE_URI}",
-            "image_tag": "${IMAGE_TAG}",
-            "git_sha": "$(git rev-parse HEAD)",
-            "aws_region": "${{ github.event.inputs.aws_region }}",
-            "note": "Pass MODEL_ARTIFACT_URI (and optional MODEL_VERSION) at deploy/runtime; not used to build this image."
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          payload = {
+              "image_uri": os.environ["IMAGE_URI"],
+              "image_tag": os.environ["IMAGE_TAG"],
+              "git_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+              "aws_region": os.environ["AWS_REGION_INPUT"],
+              "note": "Pass MODEL_ARTIFACT_URI (and optional MODEL_VERSION) at deploy/runtime; not used to build this image.",
           }
-          EOF
+          with open("inference_build_metadata.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f, indent=2)
+              f.write("\n")
+          PY
           cat inference_build_metadata.json
 
       - name: Upload build metadata
