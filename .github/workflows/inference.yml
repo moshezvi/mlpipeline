@@ -60,6 +60,10 @@ jobs:
   build-inference-image:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      IMAGE_REPOSITORY: ${{ github.event.inputs.image_repository }}
+      IMAGE_TAG_INPUT: ${{ github.event.inputs.image_tag }}
+      AWS_REGION: ${{ github.event.inputs.aws_region }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,12 +83,27 @@ jobs:
 
       - name: Resolve image metadata
         run: |
-          TAG="${{ github.event.inputs.image_tag }}"
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import re
+
+          repository = os.environ["IMAGE_REPOSITORY"]
+          tag = os.environ.get("IMAGE_TAG_INPUT", "")
+          region = os.environ.get("AWS_REGION", "")
+          if not re.fullmatch(r"[A-Za-z0-9._:/-]+", repository):
+              raise SystemExit(f"Invalid IMAGE_REPOSITORY: {repository!r}")
+          if tag and not re.fullmatch(r"[A-Za-z0-9._-]+", tag):
+              raise SystemExit(f"Invalid IMAGE_TAG_INPUT: {tag!r}")
+          if not re.fullmatch(r"[A-Za-z0-9-]+", region):
+              raise SystemExit(f"Invalid AWS_REGION: {region!r}")
+          PY
+          TAG="$IMAGE_TAG_INPUT"
           if [ -z "$TAG" ]; then
             SHORT_SHA=$(git rev-parse --short HEAD)
             TAG="inference-${SHORT_SHA}"
           fi
-          IMAGE_URI="${{ github.event.inputs.image_repository }}:${TAG}"
+          IMAGE_URI="${IMAGE_REPOSITORY}:${TAG}"
           echo "IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
           echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
 
@@ -96,15 +115,31 @@ jobs:
 
       - name: Emit build metadata artifact
         run: |
-          cat > inference_build_metadata.json <<EOF
-          {
-            "image_uri": "${IMAGE_URI}",
-            "image_tag": "${IMAGE_TAG}",
-            "git_sha": "$(git rev-parse HEAD)",
-            "aws_region": "${{ github.event.inputs.aws_region }}",
-            "note": "Pass MODEL_ARTIFACT_URI (and optional MODEL_VERSION) at deploy/runtime; not used to build this image."
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          payload = {
+              "image_uri": os.environ["IMAGE_URI"],
+              "image_tag": os.environ["IMAGE_TAG"],
+              "git_sha": subprocess.check_output(
+                  ["git", "rev-parse", "HEAD"],
+                  text=True,
+              ).strip(),
+              "aws_region": os.environ["AWS_REGION"],
+              "note": (
+                  "Pass MODEL_ARTIFACT_URI (and optional MODEL_VERSION) at "
+                  "deploy/runtime; not used to build this image."
+              ),
           }
-          EOF
+          Path("inference_build_metadata.json").write_text(
+              json.dumps(payload, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          PY
           cat inference_build_metadata.json
 
       - name: Upload build metadata
