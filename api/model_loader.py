@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import shutil
-import sys
 import tarfile
 from pathlib import Path
 from urllib.parse import urlparse
@@ -37,10 +36,18 @@ def _find_model_root(search_root: Path) -> Path:
 def _extract_tarball(archive: Path, dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:*") as tf:
-        if sys.version_info >= (3, 12):
-            tf.extractall(dest, filter="data")
-        else:
-            tf.extractall(dest)
+        dest_root = dest.resolve()
+        safe_members = []
+        for member in tf.getmembers():
+            target = (dest / member.name).resolve()
+            if not target.is_relative_to(dest_root):
+                raise ValueError(f"Unsafe tar member path: {member.name!r}")
+            if member.issym() or member.islnk() or member.isdev():
+                raise ValueError(f"Unsupported tar member type: {member.name!r}")
+            if not (member.isfile() or member.isdir()):
+                raise ValueError(f"Unsupported tar member type: {member.name!r}")
+            safe_members.append(member)
+        tf.extractall(dest, members=safe_members)
     return _find_model_root(dest)
 
 
