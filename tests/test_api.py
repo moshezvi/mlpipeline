@@ -6,7 +6,10 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.linear_model import LinearRegression
+
+from api import model_loader
 
 
 def _prepare_model_artifacts(base_dir: Path):
@@ -94,6 +97,51 @@ def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     client = app_module.app.test_client()
 
     assert client.get("/health").get_json()["model_version"] == "v-tar"
+
+
+def test_load_model_accepts_legacy_regression_model_filename(tmp_path):
+    model_dir = tmp_path / "legacy"
+    model_dir.mkdir()
+    x = pd.DataFrame(
+        [[20, 50.0, 1], [40, 80.0, 5]],
+        columns=["age", "income_k", "tenure_years"],
+    )
+    y = np.array([30000.0, 60000.0])
+    model = LinearRegression().fit(x, y)
+    joblib.dump(model, model_dir / "regression_model.joblib")
+    (model_dir / "model_version.txt").write_text("v-legacy", encoding="utf-8")
+
+    _model, model_version = model_loader.load_model(str(model_dir))
+
+    assert model_version == "v-legacy"
+
+
+def test_model_artifact_tarball_rejects_path_traversal(tmp_path):
+    payload = tmp_path / "payload.txt"
+    payload.write_text("escaped", encoding="utf-8")
+    archive = tmp_path / "malicious.tar"
+    outside_target = tmp_path / "outside.txt"
+
+    with tarfile.open(archive, "w") as tf:
+        tf.add(payload, arcname="../outside.txt")
+
+    with pytest.raises(ValueError, match="Unsafe tar member"):
+        model_loader._extract_tarball(archive, tmp_path / "extract")
+
+    assert not outside_target.exists()
+
+
+def test_model_artifact_tarball_rejects_links(tmp_path):
+    archive = tmp_path / "malicious-link.tar"
+    link_info = tarfile.TarInfo("sample_model.joblib")
+    link_info.type = tarfile.SYMTYPE
+    link_info.linkname = "/etc/passwd"
+
+    with tarfile.open(archive, "w") as tf:
+        tf.addfile(link_info)
+
+    with pytest.raises(ValueError, match="links are not allowed"):
+        model_loader._extract_tarball(archive, tmp_path / "extract")
 
 
 def test_predict_valid_and_invalid_payloads(tmp_path, monkeypatch):
