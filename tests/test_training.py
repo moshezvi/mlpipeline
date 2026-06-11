@@ -2,6 +2,9 @@ import argparse
 import json
 from pathlib import Path
 
+import numpy as np
+import pandas as pd
+
 import training.train as train_module
 import training.tracking as tracking_module
 
@@ -78,3 +81,49 @@ def test_training_increments_model_version(tmp_path, monkeypatch):
 
     assert first == "v001"
     assert second == "v002"
+
+
+def test_failed_quality_run_does_not_update_latest_release(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _stub_mlflow(monkeypatch)
+    args = argparse.Namespace(
+        samples=60,
+        random_seed=42,
+        output_dir="runs/artifacts",
+        experiment_name="test-exp",
+    )
+
+    passing_df = train_module.load_training_data(
+        data_uri=None,
+        samples=args.samples,
+        random_seed=args.random_seed,
+    )
+    train_module.train_and_log(args, passing_df)
+    latest_version_path = Path("runs/artifacts/latest/model_version.txt")
+    latest_manifest_path = Path("runs/artifacts/latest/manifest.json")
+    latest_manifest = json.loads(latest_manifest_path.read_text(encoding="utf-8"))
+
+    assert latest_version_path.read_text(encoding="utf-8") == "v001"
+    assert latest_manifest["model_path"].endswith("runs/v001/sample_model.joblib")
+    assert latest_manifest["metrics_path"].endswith("runs/v001/metrics.json")
+
+    rng = np.random.default_rng(7)
+    failing_df = pd.DataFrame(
+        {
+            "age": rng.integers(18, 70, size=args.samples),
+            "income_k": rng.normal(70, 15, size=args.samples),
+            "tenure_years": rng.integers(0, 10, size=args.samples),
+            "target": rng.normal(0, 1, size=args.samples),
+        }
+    )
+    train_module.train_and_log(args, failing_df)
+
+    failed_metrics_path = Path("runs/artifacts/runs/v002/metrics.json")
+    failed_manifest_path = Path("runs/artifacts/runs/v002/manifest.json")
+    failed_metrics = json.loads(failed_metrics_path.read_text(encoding="utf-8"))
+    failed_manifest = json.loads(failed_manifest_path.read_text(encoding="utf-8"))
+
+    assert failed_metrics["passed_quality_evaluation"] is False
+    assert failed_manifest["passed_quality_evaluation"] is False
+    assert latest_version_path.read_text(encoding="utf-8") == "v001"
+    assert json.loads(latest_manifest_path.read_text(encoding="utf-8")) == latest_manifest
