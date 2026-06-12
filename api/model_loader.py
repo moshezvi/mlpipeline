@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import shutil
+import sys
 import tarfile
 from pathlib import Path
 from urllib.parse import urlparse
@@ -65,7 +66,10 @@ def _extract_tarball(archive: Path, dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:*") as tf:
         members = _validate_tar_members(tf, dest)
-        tf.extractall(dest, members=members)
+        if sys.version_info >= (3, 12):
+            tf.extractall(dest, members=members, filter="data")
+        else:
+            tf.extractall(dest, members=members)
     return _find_model_root(dest)
 
 
