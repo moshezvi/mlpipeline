@@ -1,4 +1,5 @@
 import importlib
+import io
 import sys
 import tarfile
 from pathlib import Path
@@ -94,6 +95,65 @@ def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     client = app_module.app.test_client()
 
     assert client.get("/health").get_json()["model_version"] == "v-tar"
+
+
+def test_model_artifact_uri_tarball_rejects_path_traversal(tmp_path):
+    from api.model_loader import _extract_tarball
+
+    tar_path = tmp_path / "malicious.tar.gz"
+    escaped_path = tmp_path / "escaped.txt"
+    with tarfile.open(tar_path, "w:gz") as tf:
+        info = tarfile.TarInfo("../escaped.txt")
+        payload = b"overwrite"
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+
+    try:
+        _extract_tarball(tar_path, tmp_path / "extract")
+    except ValueError as exc:
+        assert "Unsafe tar member path" in str(exc)
+    else:
+        raise AssertionError("path traversal tar member was accepted")
+    assert not escaped_path.exists()
+
+
+def test_model_artifact_uri_tarball_rejects_links(tmp_path):
+    from api.model_loader import _extract_tarball
+
+    tar_path = tmp_path / "link.tar.gz"
+    with tarfile.open(tar_path, "w:gz") as tf:
+        link = tarfile.TarInfo("sample_model.joblib")
+        link.type = tarfile.SYMTYPE
+        link.linkname = "/etc/passwd"
+        tf.addfile(link)
+
+    try:
+        _extract_tarball(tar_path, tmp_path / "extract")
+    except ValueError as exc:
+        assert "Unsafe tar link member" in str(exc)
+    else:
+        raise AssertionError("tar symlink member was accepted")
+
+
+def test_load_model_accepts_legacy_regression_model_name(tmp_path):
+    from api.model_loader import load_model
+
+    model_dir = tmp_path / "legacy"
+    model_dir.mkdir()
+    x = pd.DataFrame(
+        [[20, 50.0, 1], [40, 80.0, 5]],
+        columns=["age", "income_k", "tenure_years"],
+    )
+    y = np.array([30000.0, 60000.0])
+    model = LinearRegression().fit(x, y)
+    joblib.dump(model, model_dir / "regression_model.joblib")
+    (model_dir / "model_version.txt").write_text("v-legacy", encoding="utf-8")
+
+    loaded_model, model_version = load_model(str(model_dir))
+
+    assert model_version == "v-legacy"
+    prediction = loaded_model.predict(x.iloc[[0]])[0]
+    assert isinstance(float(prediction), float)
 
 
 def test_predict_valid_and_invalid_payloads(tmp_path, monkeypatch):
