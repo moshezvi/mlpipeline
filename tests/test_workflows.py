@@ -49,5 +49,5 @@ def test_workflow_metadata_is_serialized_as_json():
 def test_training_submission_uses_run_scoped_artifact_uri():
     text = (ROOT / ".github" / "workflows" / "train.yml").read_text(encoding="utf-8")
 
-    assert "latest/sample_model.joblib" not in text
+    assert "MODEL_ARTIFACT_URI=${{ github.event.inputs.output_dir }}" not in text
     assert "Refusing mutable latest model artifact URI" in text
