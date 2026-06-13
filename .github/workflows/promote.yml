@@ -21,6 +21,9 @@ on:
         description: "Approver identity (mock/manual input for this portfolio project)"
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   promote-model:
     runs-on: ubuntu-latest
@@ -37,18 +40,26 @@ jobs:
       - name: Validate promotion inputs
         run: |
           set -euo pipefail
-          if [ -z "$MODEL_VERSION" ]; then
-            echo "model_version is required"
-            exit 1
-          fi
-          if [ -z "$MODEL_ARTIFACT_URI" ]; then
-            echo "model_artifact_uri is required"
-            exit 1
-          fi
-          if [ "$SOURCE_STAGE" = "$TARGET_STAGE" ]; then
-            echo "source_stage and target_stage must differ"
-            exit 1
-          fi
+          python - <<'PY'
+          import os
+
+          def read_input(name):
+              value = os.environ.get(name, "")
+              if not value:
+                  raise ValueError(f"{name} is required")
+              if "\n" in value or "\r" in value:
+                  raise ValueError(f"{name} must not contain newlines")
+              return value
+
+          source_stage = read_input("SOURCE_STAGE")
+          target_stage = read_input("TARGET_STAGE")
+          read_input("MODEL_VERSION")
+          read_input("MODEL_ARTIFACT_URI")
+          read_input("APPROVER")
+
+          if source_stage == target_stage:
+              raise ValueError("source_stage and target_stage must differ")
+          PY
 
       - name: Mock stage gates
         run: |
@@ -64,18 +75,25 @@ jobs:
 
       - name: Emit promotion record
         run: |
-          cat > promotion_record.json <<EOF
-          {
-            "model_version": "$MODEL_VERSION",
-            "model_artifact_uri": "$MODEL_ARTIFACT_URI",
-            "source_stage": "$SOURCE_STAGE",
-            "target_stage": "$TARGET_STAGE",
-            "approved_by": "$APPROVER",
-            "requested_by": "$REQUESTED_BY",
-            "git_sha": "$GIT_SHA",
-            "run_id": "$RUN_ID"
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+
+          payload = {
+              "model_version": os.environ["MODEL_VERSION"],
+              "model_artifact_uri": os.environ["MODEL_ARTIFACT_URI"],
+              "source_stage": os.environ["SOURCE_STAGE"],
+              "target_stage": os.environ["TARGET_STAGE"],
+              "approved_by": os.environ["APPROVER"],
+              "requested_by": os.environ["REQUESTED_BY"],
+              "git_sha": os.environ["GIT_SHA"],
+              "run_id": os.environ["RUN_ID"],
           }
-          EOF
+          with open("promotion_record.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f, indent=2)
+              f.write("\n")
+          PY
           cat promotion_record.json
 
       - name: Mock runtime model reference update
