@@ -60,6 +60,10 @@ jobs:
   build-inference-image:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    env:
+      IMAGE_REPOSITORY_INPUT: ${{ github.event.inputs.image_repository }}
+      IMAGE_TAG_INPUT: ${{ github.event.inputs.image_tag }}
+      AWS_REGION_INPUT: ${{ github.event.inputs.aws_region }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -79,14 +83,27 @@ jobs:
 
       - name: Resolve image metadata
         run: |
-          TAG="${{ github.event.inputs.image_tag }}"
+          reject_newlines() {
+            case "$2" in
+              *$'\n'*|*$'\r'*)
+                echo "$1 must not contain newline characters"
+                exit 1
+                ;;
+            esac
+          }
+          for name in IMAGE_REPOSITORY_INPUT IMAGE_TAG_INPUT AWS_REGION_INPUT; do
+            reject_newlines "$name" "${!name}"
+          done
+          TAG="$IMAGE_TAG_INPUT"
           if [ -z "$TAG" ]; then
             SHORT_SHA=$(git rev-parse --short HEAD)
             TAG="inference-${SHORT_SHA}"
           fi
-          IMAGE_URI="${{ github.event.inputs.image_repository }}:${TAG}"
-          echo "IMAGE_TAG=$TAG" >> "$GITHUB_ENV"
-          echo "IMAGE_URI=$IMAGE_URI" >> "$GITHUB_ENV"
+          IMAGE_URI="${IMAGE_REPOSITORY_INPUT}:${TAG}"
+          {
+            echo "IMAGE_TAG=$TAG"
+            echo "IMAGE_URI=$IMAGE_URI"
+          } >> "$GITHUB_ENV"
 
       - name: Build model-agnostic inference image
         run: |
@@ -96,16 +113,23 @@ jobs:
 
       - name: Emit build metadata artifact
         run: |
-          cat > inference_build_metadata.json <<EOF
-          {
-            "image_uri": "${IMAGE_URI}",
-            "image_tag": "${IMAGE_TAG}",
-            "git_sha": "$(git rev-parse HEAD)",
-            "aws_region": "${{ github.event.inputs.aws_region }}",
-            "note": "Pass MODEL_ARTIFACT_URI (and optional MODEL_VERSION) at deploy/runtime; not used to build this image."
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          payload = {
+              "image_uri": os.environ["IMAGE_URI"],
+              "image_tag": os.environ["IMAGE_TAG"],
+              "git_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip(),
+              "aws_region": os.environ["AWS_REGION_INPUT"],
+              "note": "Pass MODEL_ARTIFACT_URI (and optional MODEL_VERSION) at deploy/runtime; not used to build this image.",
           }
-          EOF
-          cat inference_build_metadata.json
+          with open("inference_build_metadata.json", "w", encoding="utf-8") as f:
+              json.dump(payload, f, indent=2)
+              f.write("\n")
+          print(json.dumps(payload, indent=2))
+          PY
 
       - name: Upload build metadata
         uses: actions/upload-artifact@v4
