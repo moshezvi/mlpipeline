@@ -52,6 +52,9 @@ def save_artifacts(
     paths["run_metrics_path"].write_text(json.dumps(metrics_payload, indent=2), encoding="utf-8")
     paths["run_version_path"].write_text(model_version, encoding="utf-8")
 
+    if not bool(metrics_payload["passed_quality_evaluation"]):
+        return
+
     joblib.dump(model, paths["latest_model_path"])
     paths["latest_metrics_path"].write_text(json.dumps(metrics_payload, indent=2), encoding="utf-8")
     paths["latest_version_path"].write_text(model_version, encoding="utf-8")
@@ -64,8 +67,8 @@ def emit_manifest(
 ) -> dict[str, str | bool | float]:
     manifest = {
         "model_version": model_version,
-        "model_path": str(paths["latest_model_path"]),
-        "metrics_path": str(paths["latest_metrics_path"]),
+        "model_path": str(paths["run_model_path"]),
+        "metrics_path": str(paths["run_metrics_path"]),
         "passed_quality_evaluation": bool(metrics_payload["passed_quality_evaluation"]),
         "created_at_utc": datetime.now(timezone.utc).isoformat(),
     }
@@ -73,5 +76,6 @@ def emit_manifest(
         manifest["git_commit"] = str(metrics_payload["git_commit"])
 
     paths["run_manifest_path"].write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-    paths["latest_manifest_path"].write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+    if manifest["passed_quality_evaluation"]:
+        paths["latest_manifest_path"].write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return manifest
