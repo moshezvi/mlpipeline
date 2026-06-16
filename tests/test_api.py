@@ -6,7 +6,10 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.linear_model import LinearRegression
+
+from api.model_loader import _extract_tarball
 
 
 def _prepare_model_artifacts(base_dir: Path):
@@ -94,6 +97,31 @@ def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     client = app_module.app.test_client()
 
     assert client.get("/health").get_json()["model_version"] == "v-tar"
+
+
+def test_model_artifact_tarball_rejects_path_traversal(tmp_path):
+    safe_file = tmp_path / "payload.txt"
+    safe_file.write_text("overwrite attempt", encoding="utf-8")
+    tar_path = tmp_path / "malicious.tar"
+    with tarfile.open(tar_path, "w") as tf:
+        tf.add(safe_file, arcname="../escaped.txt")
+
+    with pytest.raises(ValueError, match="outside extraction directory"):
+        _extract_tarball(tar_path, tmp_path / "staging")
+
+    assert not (tmp_path / "escaped.txt").exists()
+
+
+def test_model_artifact_tarball_rejects_links(tmp_path):
+    tar_path = tmp_path / "malicious-link.tar"
+    link = tarfile.TarInfo("sample_model.joblib")
+    link.type = tarfile.SYMTYPE
+    link.linkname = "/tmp/target"
+    with tarfile.open(tar_path, "w") as tf:
+        tf.addfile(link)
+
+    with pytest.raises(ValueError, match="Unsupported tar member type"):
+        _extract_tarball(tar_path, tmp_path / "staging")
 
 
 def test_predict_valid_and_invalid_payloads(tmp_path, monkeypatch):
