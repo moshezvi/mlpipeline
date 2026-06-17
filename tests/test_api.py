@@ -65,6 +65,31 @@ def test_load_via_model_artifact_uri_local_dir_and_version_override(tmp_path, mo
     assert health.get_json()["model_version"] == "v-from-env"
 
 
+def test_loads_legacy_regression_model_artifact_name(tmp_path, monkeypatch):
+    """Inference remains compatible with artifacts produced before the sample_model rename."""
+    model_dir = tmp_path / "legacy_artifact"
+    model_dir.mkdir()
+    x = pd.DataFrame(
+        [[20, 50.0, 1], [40, 80.0, 5]],
+        columns=["age", "income_k", "tenure_years"],
+    )
+    y = np.array([30000.0, 60000.0])
+    model = LinearRegression().fit(x, y)
+    joblib.dump(model, model_dir / "regression_model.joblib")
+    (model_dir / "model_version.txt").write_text("v-legacy", encoding="utf-8")
+    monkeypatch.setenv("MODEL_ARTIFACT_URI", str(model_dir))
+    monkeypatch.setenv("MODEL_DIR", str(tmp_path / "unused_default"))
+    monkeypatch.delenv("MODEL_VERSION", raising=False)
+
+    sys.modules.pop("api.app", None)
+    app_module = importlib.import_module("api.app")
+    client = app_module.app.test_client()
+
+    health = client.get("/health")
+    assert health.status_code == 200
+    assert health.get_json()["model_version"] == "v-legacy"
+
+
 def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     """Local tarball path containing sample_model.joblib + model_version.txt."""
     inner = tmp_path / "bundle"
