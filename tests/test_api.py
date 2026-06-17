@@ -1,4 +1,5 @@
 import importlib
+import io
 import sys
 import tarfile
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.linear_model import LinearRegression
 
 
@@ -94,6 +96,54 @@ def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     client = app_module.app.test_client()
 
     assert client.get("/health").get_json()["model_version"] == "v-tar"
+
+
+def test_tarball_artifact_rejects_path_traversal(tmp_path):
+    from api.model_loader import _extract_tarball
+
+    tar_path = tmp_path / "malicious.tar"
+    with tarfile.open(tar_path, "w") as tf:
+        data = b"owned"
+        info = tarfile.TarInfo("../../escape.txt")
+        info.size = len(data)
+        tf.addfile(info, io.BytesIO(data))
+
+    with pytest.raises(ValueError, match="Unsafe tar member path"):
+        _extract_tarball(tar_path, tmp_path / "staging")
+
+    assert not (tmp_path / "escape.txt").exists()
+
+
+def test_tarball_artifact_rejects_links(tmp_path):
+    from api.model_loader import _extract_tarball
+
+    tar_path = tmp_path / "link.tar"
+    with tarfile.open(tar_path, "w") as tf:
+        info = tarfile.TarInfo("model-link")
+        info.type = tarfile.SYMTYPE
+        info.linkname = "/etc/passwd"
+        tf.addfile(info)
+
+    with pytest.raises(ValueError, match="Unsafe tar member type"):
+        _extract_tarball(tar_path, tmp_path / "staging")
+
+
+def test_load_model_accepts_legacy_regression_model_basename(tmp_path):
+    from api.model_loader import load_model
+
+    x = pd.DataFrame(
+        [[20, 50.0, 1], [40, 80.0, 5]],
+        columns=["age", "income_k", "tenure_years"],
+    )
+    y = np.array([30000.0, 60000.0])
+    model = LinearRegression().fit(x, y)
+    joblib.dump(model, tmp_path / "regression_model.joblib")
+    (tmp_path / "model_version.txt").write_text("v-legacy", encoding="utf-8")
+
+    loaded_model, version = load_model(str(tmp_path))
+
+    assert version == "v-legacy"
+    assert loaded_model.predict(x).shape == (2,)
 
 
 def test_predict_valid_and_invalid_payloads(tmp_path, monkeypatch):
