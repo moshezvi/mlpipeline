@@ -6,10 +6,11 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.linear_model import LinearRegression
 
 
-def _prepare_model_artifacts(base_dir: Path):
+def _prepare_model_artifacts(base_dir: Path, model_filename: str = "sample_model.joblib"):
     model_dir = base_dir / "runs" / "artifacts" / "latest"
     model_dir.mkdir(parents=True, exist_ok=True)
 
@@ -20,7 +21,7 @@ def _prepare_model_artifacts(base_dir: Path):
     y = np.array([30000.0, 60000.0, 90000.0])
     model = LinearRegression().fit(x, y)
 
-    joblib.dump(model, model_dir / "sample_model.joblib")
+    joblib.dump(model, model_dir / model_filename)
     (model_dir / "model_version.txt").write_text("vtest", encoding="utf-8")
     return model_dir
 
@@ -39,6 +40,21 @@ def test_health_endpoint_returns_status_and_model_version(tmp_path, monkeypatch)
     payload = response.get_json()
     assert payload["status"] == "ok"
     assert payload["model_version"] == "vtest"
+
+
+def test_health_endpoint_loads_legacy_regression_model_artifact(tmp_path, monkeypatch):
+    model_dir = _prepare_model_artifacts(tmp_path, model_filename="regression_model.joblib")
+    monkeypatch.setenv("MODEL_DIR", str(model_dir))
+    monkeypatch.delenv("MODEL_ARTIFACT_URI", raising=False)
+    monkeypatch.delenv("MODEL_VERSION", raising=False)
+
+    sys.modules.pop("api.app", None)
+    app_module = importlib.import_module("api.app")
+    client = app_module.app.test_client()
+
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.get_json()["model_version"] == "vtest"
 
 
 def test_load_via_model_artifact_uri_local_dir_and_version_override(tmp_path, monkeypatch):
@@ -94,6 +110,22 @@ def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     client = app_module.app.test_client()
 
     assert client.get("/health").get_json()["model_version"] == "v-tar"
+
+
+def test_model_artifact_tarball_rejects_path_traversal(tmp_path):
+    from api.model_loader import _extract_tarball
+
+    tar_path = tmp_path / "malicious.tar"
+    escaped_path = tmp_path / "escaped.txt"
+    with tarfile.open(tar_path, "w") as tf:
+        payload = tmp_path / "payload.txt"
+        payload.write_text("owned", encoding="utf-8")
+        tf.add(payload, arcname="../escaped.txt")
+
+    with pytest.raises(ValueError, match="Unsafe tar member path"):
+        _extract_tarball(tar_path, tmp_path / "staging")
+
+    assert not escaped_path.exists()
 
 
 def test_predict_valid_and_invalid_payloads(tmp_path, monkeypatch):
