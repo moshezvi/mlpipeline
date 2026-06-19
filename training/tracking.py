@@ -30,9 +30,16 @@ def log_to_mlflow(
         mlflow.log_param("model_version", model_version)
         if git_commit:
             mlflow.log_param("git_commit", git_commit)
-        mlflow.log_artifact(str(paths["run_model_path"]))
-        mlflow.log_artifact(str(paths["run_metrics_path"]))
-        mlflow.log_artifact(str(paths["run_version_path"]))
-        mlflow.log_artifact(str(paths["latest_model_path"]))
-        mlflow.log_artifact(str(paths["latest_metrics_path"]))
-        mlflow.log_artifact(str(paths["latest_version_path"]))
+        for artifact_key in (
+            "run_model_path",
+            "run_metrics_path",
+            "run_version_path",
+            "run_manifest_path",
+            "latest_model_path",
+            "latest_metrics_path",
+            "latest_version_path",
+            "latest_manifest_path",
+        ):
+            artifact_path = paths[artifact_key]
+            if artifact_path.exists():
+                mlflow.log_artifact(str(artifact_path))
