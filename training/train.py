@@ -70,6 +70,13 @@ def train_and_log(args: argparse.Namespace, df: pd.DataFrame) -> None:
     save_artifacts(model, metrics_payload, model_version, paths)
     manifest = emit_manifest(model_version, metrics_payload, paths)
 
+    if not manifest["passed_quality_evaluation"]:
+        logger.error(
+            "Model version %s failed quality evaluation; latest artifacts were not updated",
+            model_version,
+        )
+        raise RuntimeError("model failed quality evaluation")
+
     log_to_mlflow(args, model_version, metrics_payload, paths, git_commit)
 
     logger.info("Saved run artifacts to: %s", paths["run_dir"])
