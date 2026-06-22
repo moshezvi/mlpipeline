@@ -37,11 +37,29 @@ def _find_model_root(search_root: Path) -> Path:
 def _extract_tarball(archive: Path, dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
     with tarfile.open(archive, "r:*") as tf:
+        _validate_tarball_members(tf, dest)
         if sys.version_info >= (3, 12):
             tf.extractall(dest, filter="data")
         else:
             tf.extractall(dest)
     return _find_model_root(dest)
+
+
+def _validate_tarball_members(tf: tarfile.TarFile, dest: Path) -> None:
+    destination = dest.resolve()
+    for member in tf.getmembers():
+        member_path = (destination / member.name).resolve()
+        try:
+            member_path.relative_to(destination)
+        except ValueError as exc:
+            raise ValueError(f"Refusing to extract unsafe tar member: {member.name!r}") from exc
+
+        if member.isdir() or member.isfile():
+            continue
+
+        raise ValueError(
+            f"Refusing to extract non-file tar member: {member.name!r}"
+        )
 
 
 def _download_s3_to_dir(uri: str, dest_dir: Path) -> Path:
