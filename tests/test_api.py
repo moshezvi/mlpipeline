@@ -1,4 +1,5 @@
 import importlib
+import io
 import sys
 import tarfile
 from pathlib import Path
@@ -6,6 +7,7 @@ from pathlib import Path
 import joblib
 import numpy as np
 import pandas as pd
+import pytest
 from sklearn.linear_model import LinearRegression
 
 
@@ -94,6 +96,38 @@ def test_load_via_model_artifact_uri_tarball(tmp_path, monkeypatch):
     client = app_module.app.test_client()
 
     assert client.get("/health").get_json()["model_version"] == "v-tar"
+
+
+def test_model_artifact_tarball_rejects_path_traversal(tmp_path):
+    from api import model_loader
+
+    tar_path = tmp_path / "malicious.tar.gz"
+    payload = b"owned"
+    with tarfile.open(tar_path, "w:gz") as tf:
+        info = tarfile.TarInfo("../../pwned.txt")
+        info.size = len(payload)
+        tf.addfile(info, io.BytesIO(payload))
+
+    extract_dir = tmp_path / "extract"
+    escaped_path = (extract_dir / "../../pwned.txt").resolve()
+    with pytest.raises(ValueError, match="unsafe tar member"):
+        model_loader._extract_tarball(tar_path, extract_dir)
+
+    assert not escaped_path.exists()
+
+
+def test_model_artifact_tarball_rejects_links(tmp_path):
+    from api import model_loader
+
+    tar_path = tmp_path / "link.tar.gz"
+    with tarfile.open(tar_path, "w:gz") as tf:
+        info = tarfile.TarInfo("sample_model.joblib")
+        info.type = tarfile.SYMTYPE
+        info.linkname = "/etc/passwd"
+        tf.addfile(info)
+
+    with pytest.raises(ValueError, match="non-file tar member"):
+        model_loader._extract_tarball(tar_path, tmp_path / "extract")
 
 
 def test_predict_valid_and_invalid_payloads(tmp_path, monkeypatch):
